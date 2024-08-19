@@ -39,7 +39,7 @@ dcaError fDcaWrite(dcaConvSound *cs, const char *outfname) {
 	if (cs->channels > DCA_FILE_MAX_CHANNELS)
 		return DCAE_TOO_MANY_CHANNELS;
 	
-	//Calculate size of a chennel in bytes
+	//Calculate size of a channel in bytes
 	unsigned channelsize = cs->size_samples;
 	if (cs->format == DCAF_PCM16) {
 		channelsize *= 2;
@@ -55,16 +55,13 @@ dcaError fDcaWrite(dcaConvSound *cs, const char *outfname) {
 	//Round channel size up to multiple of 32
 	channelsize = (channelsize+31) & ~0x1f;
 	
-printf("%u channel%s\n", cs->channels, cs->channels > 1 ? "s" : "");
-printf("size of channel of %u samples is %u bytes\n", (unsigned)cs->size_samples, (unsigned)channelsize);
-	
 	//Convert to target format
 	void *samples[DCA_FILE_MAX_CHANNELS];
 	if (cs->format == DCAF_PCM16) {
 		//Already in target format, just copy them
 		for(unsigned i = 0; i < cs->channels; i++) {
 			samples[i] = calloc(1, channelsize);
-			memcpy(samples[i], cs->samples[i], cs->size_samples * sizeof(*samples[0]));
+			memcpy(samples[i], cs->samples[i], cs->size_samples * 2);
 		}
 	} else if (cs->format == DCAF_PCM8) {
 		//TODO add dithering?
@@ -101,6 +98,7 @@ printf("size of channel of %u samples is %u bytes\n", (unsigned)cs->size_samples
 		head.loop_end = cs->loop_end;
 	}
 	
+	//Write to disk
 	unsigned written = 0;
 	FILE *f = fopen(outfname, "w");
 	if (f == NULL)
@@ -111,8 +109,8 @@ printf("size of channel of %u samples is %u bytes\n", (unsigned)cs->size_samples
 		written += fwrite(samples[i], 1, channelsize, f);
 	fclose(f);
 	
-	printf("Exoected size: %u\n", (unsigned)head.chunk_size);
-	printf("Written: %u\n", written);
+	//~ printf("Exoected size: %u\n", (unsigned)head.chunk_size);
+	//~ printf("Written: %u\n", written);
 	
 	for(unsigned i = 0; i < cs->channels; i++)
 		free(samples[i]);

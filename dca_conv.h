@@ -48,7 +48,9 @@ typedef struct {
 	dcaFormat format;
 	//Channels to convert to (if 0, desired channels depends on format)
 	unsigned desired_channels;
+	
 	unsigned desired_sample_rate_hz;
+	//~ float ratio;
 	//Generate DCA file longer than DCAC_MAX_SAMPLES without downsampling
 	bool long_sound;
 	
@@ -56,7 +58,7 @@ typedef struct {
 	unsigned loop_start, loop_end;
 } dcaConvSound;
 static inline size_t dcaCSSizeBytes(const dcaConvSound *cs) {
-	return cs->size_samples * sizeof(*cs->samples[0]);
+	return cs->size_samples * sizeof(int16_t);
 }
 
 typedef struct {
