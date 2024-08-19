@@ -117,6 +117,9 @@ dcaError dcaLoadWave(DcAudioConverter *dcac, const char *fname) {
 	
 	//~ printf("Wave got %u samples and %u channels\n",(unsigned)sample_cnt, (unsigned)wav.channels);
 	
+	drwav_uninit(&wav);
+	free(interleaved_samples);
+	
 	return DCAE_OK;
 }
 
