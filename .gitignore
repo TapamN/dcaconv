@@ -1,0 +1,8 @@
+junk/
+*.o
+*.bin
+*.elf
+a.out
+dctool.log
+gmon.out
+dcaconv
