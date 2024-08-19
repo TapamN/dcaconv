@@ -92,10 +92,10 @@ dcaError fDcaWrite(dcaConvSound *cs, const char *outfname) {
 	head.sample_rate_aica = CalcPitch(cs->sample_rate_hz);
 	head.length = cs->size_samples;
 	
-	if (cs->looping) {
+	if (cs->loop_end > cs->loop_start) {
 		head.flags |= DCA_FLAG_LOOPING;
 		head.loop_start = cs->loop_start;
-		head.loop_end = cs->loop_end;
+		head.loop_end = cs->loop_end-1;
 	}
 	
 	//Write to disk
@@ -111,6 +111,7 @@ dcaError fDcaWrite(dcaConvSound *cs, const char *outfname) {
 	
 	//~ printf("Exoected size: %u\n", (unsigned)head.chunk_size);
 	//~ printf("Written: %u\n", written);
+	(void)written;
 	
 	for(unsigned i = 0; i < cs->channels; i++)
 		free(samples[i]);

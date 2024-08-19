@@ -54,7 +54,7 @@ typedef struct {
 	//Generate DCA file longer than DCAC_MAX_SAMPLES without downsampling
 	bool long_sound;
 	
-	bool looping;
+	//File has loop if loop_end > loop_start
 	unsigned loop_start, loop_end;
 } dcaConvSound;
 static inline size_t dcaCSSizeBytes(const dcaConvSound *cs) {

@@ -155,6 +155,8 @@ void dcaCSDownmixMono(dcaConvSound *cs) {
 	if (cs->channels == 1)
 		return;
 	
+	printf("Downmixing to mono\n");
+	
 	//Average channels together
 	int16_t *newsamples = malloc(dcaCSSizeBytes(cs));
 	for(unsigned i = 0; i < cs->size_samples; i++) {
@@ -265,6 +267,16 @@ int main(int argc, char **argv) {
 		case 'l':
 			dcac.out.long_sound = true;
 			break;
+		case 's':
+			if (sscanf(options.optarg, "%u", &dcac.out.loop_start) != 1)  {
+				ErrorExit("Invalid loop start. Must be in sample position. The first sample is 0.\n");
+			}
+			break;
+		case 'e':
+			if (sscanf(options.optarg, "%u", &dcac.out.loop_end) != 1)  {
+				ErrorExit("Invalid loop end. Must be in sample position. The first sample is 0.\n");
+			}
+			break;
 		case 'c':
 			if ((sscanf(options.optarg, "%u", &dcac.out.desired_channels) != 1) 
 					|| (dcac.out.desired_channels == 0) || (dcac.out.desired_channels > DCAC_MAX_CHANNELS))  {
@@ -286,7 +298,7 @@ int main(int argc, char **argv) {
 	//Load input file
 	const char *inext = GetExtension(dcac.in.filename);
 	ErrorExitOn(inext[0] == 0, "Unknown file type (no extension)\n");
-	dcaError loadresult;
+	dcaError loadresult = DCAE_OK;
 	
 	if (strcasecmp(inext, ".wav") == 0) {
 		loadresult = dcaLoadWave(dcacp, dcac.in.filename);
@@ -333,10 +345,11 @@ int main(int argc, char **argv) {
 			ErrorExitOn(new_rate < 172, "This sound is too long for the AICA to handle directly.\n"
 				"To allow long sounds, use the --long option\n");
 			
-			printf("Input file is long (%u samples). AICA only directly supports sounds shorter than 65000 samples.\n"
+			printf("Input file is long (%u samples). AICA only directly supports sounds shorter than %u samples.\n"
 				"Reducing frequency from %u hz to %u hz to fit within AICA limits. Resulting file will be %u samples long\n"
 				"To allow long sounds, use the --long option\n",
 				(unsigned)dcac.out.size_samples,
+				(1<<16)-1,
 				dcac.out.desired_sample_rate_hz,
 				new_rate,
 				desired_size_samples);
