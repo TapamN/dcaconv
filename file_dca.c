@@ -55,31 +55,31 @@ dcaError fDcaLoad(DcAudioConverter *dcac, const char *fname) {
 	
 	
 	unsigned channels = data->flags & DCA_FLAG_CHANNEL_COUNT_MASK;
-	unsigned size_samples = data->length;
+	unsigned sample_cnt = data->length;
 	void *filesamples = (char*)data + fDaGetHeaderSize(data);
 	size_t channel_size = (dcac->in.size_samples + 31) & ~0x1f;
 	
 	dcac->in.sample_rate_hz = data->sample_rate_hz;
 	dcac->in.channels = channels;
-	dcac->in.size_samples = size_samples;
+	dcac->in.size_samples = sample_cnt;
 	
-	printf("DCA file had %u channel%s with %u samples are %u hz\n", channels, channels>1?"s":"", size_samples, data->sample_rate_hz);
+	printf("DCA file had %u channel%s with %u samples at %u hz\n", channels, channels>1?"s":"", sample_cnt, data->sample_rate_hz);
 	
 	//Convert to 16-bit PCM
 	unsigned format = (data->flags >> DCA_FLAG_FORMAT_SHIFT) & DCA_FLAG_FORMAT_MASK;
 	if (format == DCAF_PCM16) {
 		channel_size *= sizeof(int16_t);
 		for(unsigned c = 0; c < channels; c++) {
-			dcac->in.samples[c] = calloc(size_samples, sizeof(int16_t));
+			dcac->in.samples[c] = calloc(sample_cnt, sizeof(int16_t));
 			void *channel_ptr = (char*)filesamples + channel_size * c;
-			memcpy(dcac->in.samples[c], channel_ptr, dcac->in.size_samples);
+			memcpy(dcac->in.samples[c], channel_ptr, sample_cnt * sizeof(int16_t));
 		}
 	} else if (format == DCAF_PCM8) {
 		channel_size *= sizeof(int8_t);
 		for(unsigned c = 0; c < channels; c++) {
-			dcac->in.samples[c] = calloc(size_samples, sizeof(int16_t));
+			dcac->in.samples[c] = calloc(sample_cnt, sizeof(int16_t));
 			int8_t *channel_ptr = (int16_t*)((char*)filesamples + channel_size * c);
-			for(unsigned i = 0; i < size_samples; i++) {
+			for(unsigned i = 0; i < sample_cnt; i++) {
 				dcac->in.samples[c][i] = channel_ptr[i] * 256;
 			}
 		}
@@ -87,9 +87,9 @@ dcaError fDcaLoad(DcAudioConverter *dcac, const char *fname) {
 		channel_size = (dcac->in.size_samples/2 + 31) & ~0x1f;
 		printf("ch size: %u\n", channel_size);
 		for(unsigned c = 0; c < channels; c++) {
-			dcac->in.samples[c] = calloc(size_samples, sizeof(int16_t));
+			dcac->in.samples[c] = calloc(sample_cnt, sizeof(int16_t));
 			uint8_t *channel_ptr = (int8_t*)filesamples + channel_size * c;
-			adpcm2pcm(dcac->in.samples[c], channel_ptr, size_samples);
+			adpcm2pcm(dcac->in.samples[c], channel_ptr, sample_cnt);
 		}
 	} else {
 		goto readerror;
