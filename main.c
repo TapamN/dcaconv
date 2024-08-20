@@ -451,11 +451,15 @@ int main(int argc, char **argv) {
 	dcaError write_error = DCAE_UNKNOWN;
 	if (strcasecmp(outext, ".dca") == 0) {
 		write_error = fDcaWrite(&dcac.out, dcac.out.filename);
+	} else if (strcasecmp(outext, ".wav") == 0) {
+		write_error = fWavWrite(&dcac.out, dcac.out.filename);
 	} else {
 		ErrorExit("Unsupported output file type '%s'\n", outext);
 	}
 	if (write_error)
 		printf("write error #%i\n", write_error);
+	else
+		printf("success\n");
 	
 	dcaFree(dcacp);
 	

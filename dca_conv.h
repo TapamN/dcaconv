@@ -95,5 +95,6 @@ typedef enum {
 
 dcaError dcaLoadFile(DcAudioConverter *dcac, const char *filename);
 dcaError fDcaWrite(dcaConvSound *cs, const char *outfname);
+dcaError fWavWrite(dcaConvSound *cs, const char *outfname);
 
 #endif
