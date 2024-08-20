@@ -90,11 +90,15 @@ typedef enum {
 	
 	DCAE_TOO_LONG,
 	
+	DCAE_WRITE_ERROR,
+	
 	DCAE_UNKNOWN,
 } dcaError;
 
-dcaError dcaLoadFile(DcAudioConverter *dcac, const char *filename);
+dcaError fWavLoad(DcAudioConverter *dcac, const char *fname);
 dcaError fDcaWrite(dcaConvSound *cs, const char *outfname);
 dcaError fWavWrite(dcaConvSound *cs, const char *outfname);
+
+void DeinterleaveSamples(dcaConvSound *cs, int16_t *samples, unsigned sample_cnt, unsigned channels);
 
 #endif

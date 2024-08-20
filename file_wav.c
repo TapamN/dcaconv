@@ -5,6 +5,35 @@
 #include "dr_wav.h"
 #include "dca_conv.h"
 
+
+dcaError fWavLoad(DcAudioConverter *dcac, const char *fname) {
+	drwav wav;
+	if (!drwav_init_file(&wav, fname, NULL)) {
+		return DCAE_READ_OPEN_ERROR;
+	}
+	
+	drwav_int16 *interleaved_samples = malloc(wav.totalPCMFrameCount * wav.channels * sizeof(drwav_int16));
+	size_t sample_cnt = drwav_read_pcm_frames_s16(&wav, wav.totalPCMFrameCount, interleaved_samples);
+	
+	if (sample_cnt != wav.totalPCMFrameCount) {
+		printf("Short read of %u samples out of %u\n", (unsigned)sample_cnt, (unsigned)wav.totalPCMFrameCount);
+	}
+	
+	dcac->in.format = DCAF_PCM16;
+	dcac->in.filename = fname;
+	dcac->in.sample_rate_hz = wav.sampleRate;
+	dcac->in.channels = wav.channels;
+	dcac->in.size_samples = sample_cnt;
+	DeinterleaveSamples(&dcac->in, interleaved_samples, sample_cnt, wav.channels);
+	
+	//~ printf("Wave got %u samples and %u channels\n",(unsigned)sample_cnt, (unsigned)wav.channels);
+	
+	drwav_uninit(&wav);
+	free(interleaved_samples);
+	
+	return DCAE_OK;
+}
+
 dcaError fWavWrite(dcaConvSound *cs, const char *outfname) {
 	drwav wav;
 	drwav_data_format format;
