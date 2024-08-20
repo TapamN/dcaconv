@@ -95,6 +95,30 @@ void dcaFree(DcAudioConverter *dcac) {
 	}
 }
 
+dcaError GeneratePreview(const char *src_fname, const char *preview_fname) {
+	if (strcasecmp(GetExtension(src_fname), ".dca") != 0) {
+		printf("Can only generate previews for .DCA format output files\n");
+		return DCAE_UNSUPPORTED_FILE_TYPE;
+	}
+	if (strcasecmp(GetExtension(preview_fname), ".wav") != 0) {
+		printf("Can only generate .WAV preview files\n");
+		return DCAE_UNSUPPORTED_FILE_TYPE;
+	}
+	
+	DcAudioConverter dcac, *dcacp = &dcac;
+	dcaInit(dcacp);
+	dcaError retval = fDcaLoad(dcacp, src_fname);
+	
+	if (retval) {
+		printf("Error retrieving output file for preview\n");
+	} else {
+		retval = fWavWrite(&dcac.in, preview_fname);
+		printf("Wrote preview to '%s' (errval %u)\n", preview_fname, retval);
+	}
+	dcaFree(dcacp);
+	
+	return retval;
+}
 
 /*
 	Frees any samples stored in dst, then allocates copies of samples in src.
@@ -191,6 +215,8 @@ int main(int argc, char **argv) {
 	DcAudioConverter dcac, *dcacp = &dcac;
 	dcaInit(dcacp);
 	
+	const char *preview = NULL;
+	
 	//Parse command line parameters
 	struct optparse options;
 	int option;
@@ -199,6 +225,7 @@ int main(int argc, char **argv) {
 		{"help", 'h', OPTPARSE_NONE},
 		{"out", 'o', OPTPARSE_REQUIRED},
 		{"in", 'i', OPTPARSE_REQUIRED},
+		{"preview", 'p', OPTPARSE_REQUIRED},
 		
 		{"format", 'f', OPTPARSE_REQUIRED},
 		{"rate", 'r', OPTPARSE_REQUIRED},
@@ -229,6 +256,9 @@ int main(int argc, char **argv) {
 			break;
 		case 'o':
 			dcac.out.filename = options.optarg;
+			break;
+		case 'p':
+			preview = options.optarg;
 			break;
 		case 'f':
 			dcac.out.format = GetOptMap(out_sound_format, ARR_SIZE(out_sound_format), options.optarg, -1, "invalid format\n");
@@ -431,9 +461,14 @@ int main(int argc, char **argv) {
 		ErrorExit("Unsupported output file type '%s'\n", outext);
 	}
 	if (write_error)
-		printf("write error #%i\n", write_error);
+		printf("Write error #%i\n", write_error);
 	else
-		printf("success\n");
+		printf("Success\n");
+	
+	//Write preview
+	if (preview && !write_error) {
+		GeneratePreview(dcac.out.filename, preview);
+	}
 	
 	dcaFree(dcacp);
 	

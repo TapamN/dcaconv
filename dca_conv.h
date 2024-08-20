@@ -97,6 +97,7 @@ typedef enum {
 	DCAE_UNKNOWN,
 } dcaError;
 
+dcaError fDcaLoad(DcAudioConverter *dcac, const char *fname);
 dcaError fWavLoad(DcAudioConverter *dcac, const char *fname);
 dcaError fDcaWrite(dcaConvSound *cs, const char *outfname);
 dcaError fWavWrite(dcaConvSound *cs, const char *outfname);

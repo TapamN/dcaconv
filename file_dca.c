@@ -28,6 +28,9 @@ void pcm2adpcm(unsigned char *dst, const short *src, size_t length);
 void adpcm2pcm(short *dst, const unsigned char *src, size_t length);
 
 dcaError fDcaLoad(DcAudioConverter *dcac, const char *fname) {
+	assert(dcac);
+	assert(fname);
+	
 	//Open
 	FILE *f = fopen(fname, "rb");
 	if (f == NULL)
