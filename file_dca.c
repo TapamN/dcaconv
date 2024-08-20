@@ -117,6 +117,6 @@ dcaError fDcaWrite(dcaConvSound *cs, const char *outfname) {
 		free(samples[i]);
 	
 	
-	return DCAE_OK;
+	return written == head.chunk_size ? DCAE_OK : DCAE_WRITE_ERROR;
 }
  
