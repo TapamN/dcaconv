@@ -274,8 +274,10 @@ int main(int argc, char **argv) {
 	
 	if (strcasecmp(inext, ".wav") == 0) {
 		loadresult = fWavLoad(dcacp, dcac.in.filename);
+	} else if (strcasecmp(inext, ".dca") == 0) {
+		loadresult = fDcaLoad(dcacp, dcac.in.filename);
 	} else {
-		ErrorExit("Unknwon file type\n");
+		ErrorExit("Unknown file type\n");
 	}
 	ErrorExitOn(loadresult, "error loading file %i\n", loadresult);
 	

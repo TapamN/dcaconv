@@ -105,4 +105,11 @@ typedef struct {
 	uint32_t padding;
 } DcAudioHeader;
 
+/*
+	Returns the size of the header in bytes
+*/
+static inline size_t fDaGetHeaderSize(const DcAudioHeader *dca) {
+	return (dca->header_size+1) * 32;
+}
+
 #endif

@@ -90,6 +90,8 @@ typedef enum {
 	
 	DCAE_TOO_LONG,
 	
+	DCAE_READ_ERROR,
+	
 	DCAE_WRITE_ERROR,
 	
 	DCAE_UNKNOWN,
