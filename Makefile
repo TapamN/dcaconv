@@ -1,5 +1,5 @@
 TARGET = dcaconv
-OBJS = main.o file_dca.o file_wav.o dr_wav_impl.o optparse_impl.o wav2adpcm.o \
+OBJS = main.o file_dca.o file_wav.o dr_wav_impl.o optparse_impl.o wav2adpcm.o util.o \
 	libsamplerate/src/samplerate.o \
 	libsamplerate/src/src_linear.o \
 	libsamplerate/src/src_zoh.o \

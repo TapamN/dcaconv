@@ -6,6 +6,7 @@
 #include <stdbool.h>
 
 #include "file_dca.h"
+#include "util.h"
 
 //Max channels supported by converter
 #define DCAC_MAX_CHANNELS	8
@@ -97,6 +98,9 @@ unsigned fDcaNearestAICAFrequency(unsigned int freq_hz);
 dcaError fWavLoad(DcAudioConverter *dcac, const char *fname);
 dcaError fWavWrite(DcAudioConverter *dcac, const char *outfname);
 
-void DeinterleaveSamples(DcAudioConverter *dcac, int16_t *samples, unsigned sample_cnt, unsigned channels);
+void dcaDeinterleaveSamples(DcAudioConverter *dcac, int16_t *samples, unsigned sample_cnt, unsigned channels);
+void dcaDownmixMono(DcAudioConverter *dcac);
+
+const char * dcaErrorString(dcaError error);
 
 #endif

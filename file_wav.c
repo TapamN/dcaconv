@@ -7,6 +7,7 @@
 
 
 dcaError fWavLoad(DcAudioConverter *dcac, const char *fname) {
+	dcaError retval = DCAE_OK;
 	drwav wav;
 	if (!drwav_init_file(&wav, fname, NULL)) {
 		return DCAE_READ_OPEN_ERROR;
@@ -16,16 +17,18 @@ dcaError fWavLoad(DcAudioConverter *dcac, const char *fname) {
 	size_t sample_cnt = drwav_read_pcm_frames_s16(&wav, wav.totalPCMFrameCount, interleaved_samples);
 	
 	if (sample_cnt != wav.totalPCMFrameCount) {
-		printf("Short read of %u samples out of %u\n", (unsigned)sample_cnt, (unsigned)wav.totalPCMFrameCount);
+		dcaLog(LOG_WARNING, "Short read of %u samples out of %u\n", (unsigned)sample_cnt, (unsigned)wav.totalPCMFrameCount);
+		retval = DCAE_READ_ERROR;
+		goto cleanup;
 	}
 	
 	dcac->sample_rate_hz = wav.sampleRate;
 	dcac->channel_cnt = wav.channels;
 	dcac->samples_len = sample_cnt;
-	DeinterleaveSamples(dcac, interleaved_samples, sample_cnt, wav.channels);
+	dcaDeinterleaveSamples(dcac, interleaved_samples, sample_cnt, wav.channels);
 	
 	//~ printf("Wave got %u samples and %u channels\n",(unsigned)sample_cnt, (unsigned)wav.channels);
-	
+cleanup:
 	drwav_uninit(&wav);
 	free(interleaved_samples);
 	
