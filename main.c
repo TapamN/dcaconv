@@ -258,6 +258,8 @@ int main(int argc, char **argv) {
 		loadresult = fDcaLoad(dcacp, in_fname);
 	} else if (strcasecmp(inext, ".ogg") == 0) {
 		loadresult = fVorbisLoad(dcacp, in_fname);
+	} else if (strcasecmp(inext, ".flac") == 0) {
+		loadresult = fFlacLoad(dcacp, in_fname);
 	} else {
 		ErrorExit("Unknown input file type\n");
 	}
