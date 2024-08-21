@@ -260,6 +260,8 @@ int main(int argc, char **argv) {
 		loadresult = fVorbisLoad(dcacp, in_fname);
 	} else if (strcasecmp(inext, ".flac") == 0) {
 		loadresult = fFlacLoad(dcacp, in_fname);
+	} else if (strcasecmp(inext, ".mp3") == 0) {
+		loadresult = fMp3Load(dcacp, in_fname);
 	} else {
 		ErrorExit("Unknown input file type\n");
 	}
@@ -286,7 +288,8 @@ int main(int argc, char **argv) {
 		
 		unsigned expected_size = (float)dcac.samples_len * dcac.desired_sample_rate_hz / dcac.sample_rate_hz;
 		if (!dcac.long_sound && expected_size > DCAC_MAX_SAMPLES) {
-			float ratio = (float)DCAC_MAX_SAMPLES / dcac.samples_len;
+			//TODO the -32 is a hack to deal with some rounding issues when calculating sample length. find a better fix later
+			float ratio = (float)(DCAC_MAX_SAMPLES-32) / dcac.samples_len;
 			unsigned new_rate = fDcaNearestAICAFrequency(dcac.sample_rate_hz * ratio);
 			unsigned desired_size_samples = (float)dcac.samples_len * new_rate / dcac.sample_rate_hz;
 			

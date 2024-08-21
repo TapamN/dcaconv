@@ -102,6 +102,8 @@ dcaError fVorbisLoad(DcAudioConverter *dcac, const char *fname);
 
 dcaError fFlacLoad(DcAudioConverter *dcac, const char *fname);
 
+dcaError fMp3Load(DcAudioConverter *dcac, const char *fname);
+
 void dcaDeinterleaveSamples(DcAudioConverter *dcac, int16_t *samples, unsigned sample_cnt, unsigned channels);
 void dcaDownmixMono(DcAudioConverter *dcac);
 

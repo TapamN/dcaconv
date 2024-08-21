@@ -1,6 +1,6 @@
 TARGET = dcaconv
 OBJS = main.o file_dca.o file_wav.o file_vorbis.o dr_wav_impl.o optparse_impl.o wav2adpcm.o util.o \
-	stb_vorbis.o file_flac.o \
+	stb_vorbis.o file_flac.o file_mp3.o \
 	libsamplerate/src/samplerate.o \
 	libsamplerate/src/src_linear.o \
 	libsamplerate/src/src_zoh.o \
