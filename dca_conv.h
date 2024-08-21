@@ -98,6 +98,8 @@ unsigned fDcaNearestAICAFrequency(unsigned int freq_hz);
 dcaError fWavLoad(DcAudioConverter *dcac, const char *fname);
 dcaError fWavWrite(DcAudioConverter *dcac, const char *outfname);
 
+dcaError fVorbisLoad(DcAudioConverter *dcac, const char *fname);
+
 void dcaDeinterleaveSamples(DcAudioConverter *dcac, int16_t *samples, unsigned sample_cnt, unsigned channels);
 void dcaDownmixMono(DcAudioConverter *dcac);
 

@@ -256,6 +256,8 @@ int main(int argc, char **argv) {
 		loadresult = fWavLoad(dcacp, in_fname);
 	} else if (strcasecmp(inext, ".dca") == 0) {
 		loadresult = fDcaLoad(dcacp, in_fname);
+	} else if (strcasecmp(inext, ".ogg") == 0) {
+		loadresult = fVorbisLoad(dcacp, in_fname);
 	} else {
 		ErrorExit("Unknown input file type\n");
 	}
