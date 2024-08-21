@@ -343,10 +343,10 @@ int main(int argc, char **argv) {
 		unsigned expected_size = (float)dcac.out.size_samples * dcac.out.desired_sample_rate_hz / dcac.out.sample_rate_hz;
 		if (!dcac.out.long_sound && expected_size > DCAC_MAX_SAMPLES) {
 			float ratio = (float)DCAC_MAX_SAMPLES / dcac.out.size_samples;
-			unsigned new_rate = dcac.out.sample_rate_hz * ratio;
+			unsigned new_rate = fDcaNearestAICAFrequency(dcac.out.sample_rate_hz * ratio);
 			unsigned desired_size_samples = (float)dcac.out.size_samples * new_rate / dcac.out.sample_rate_hz;
 			
-			ErrorExitOn(new_rate < 172, "This sound is too long for the AICA to handle directly.\n"
+			ErrorExitOn(new_rate < DCA_MINIMUM_SAMPLE_RATE_HZ, "This sound is too long for the AICA to handle directly.\n"
 				"To allow long sounds, use the --long option\n");
 			
 			printf("Input file is long (%u samples). AICA only directly supports sounds shorter than %u samples.\n"
@@ -359,14 +359,23 @@ int main(int argc, char **argv) {
 				desired_size_samples);
 			dcac.out.desired_sample_rate_hz = new_rate;
 		}
+		
+		//The floating point format of the AICA's frequency rate register results in some values getting rounded.
+		//Do the rounding here to so resampling calculations will better match actual output
+		dcac.out.desired_sample_rate_hz = fDcaNearestAICAFrequency(dcac.out.desired_sample_rate_hz);
+		
+		
 		if (dcac.out.desired_sample_rate_hz < 172) {
-			
 			printf("Sample rate of %u is too low. AICA does not support sample rates less than 172 hz. Using 172 hz sample rate\n", dcac.out.desired_sample_rate_hz);
 			dcac.out.desired_sample_rate_hz = 172;
 		}
-		if (dcac.out.format == DCAF_ADPCM && dcac.out.desired_sample_rate_hz > 88200) {
-			printf("Sample rate of %u is too high for ADPCM. AICA ADPCM does not support sample rates over 88200 hz, reducing sample rate to 88200", dcac.out.desired_sample_rate_hz);
-			dcac.out.desired_sample_rate_hz = 88200;
+		
+		if (dcac.out.format == DCAF_ADPCM && dcac.out.desired_sample_rate_hz > DCA_MAXIMUM_ADPCM_SAMPLE_RATE_HZ) {
+			printf("Sample rate of %u is too high for ADPCM. AICA ADPCM does not support sample rates over %u hz, reducing sample rate to %u",
+				dcac.out.desired_sample_rate_hz,
+				DCA_MAXIMUM_ADPCM_SAMPLE_RATE_HZ,
+				DCA_MAXIMUM_ADPCM_SAMPLE_RATE_HZ);
+			dcac.out.desired_sample_rate_hz = DCA_MAXIMUM_ADPCM_SAMPLE_RATE_HZ;
 		}
 	} else if (strcasecmp(outext, ".wav") == 0) {
 		if (dcac.out.desired_channels == 0)
@@ -394,7 +403,7 @@ int main(int argc, char **argv) {
 		dcaCSDownmixMono(&dcac.out);
 	} else if (dcac.out.desired_channels == 2 && dcac.out.channels == 1) {
 		//pad out to stereo. why is user doing this?
-		assert(0);
+		assert(0 && "todo no mono to stereo yet");
 	} else {
 		ErrorExit("Cannot convert from %u channels to %u channels\n",
 			dcac.in.channels,
@@ -403,6 +412,7 @@ int main(int argc, char **argv) {
 	
 	//Adjust sample rate
 	if (dcac.out.desired_sample_rate_hz != dcac.out.sample_rate_hz) {
+		printf("Converting input sample rate from %u hz to %u hz\n", dcac.out.sample_rate_hz, dcac.out.desired_sample_rate_hz);
 		int src_err = 0;
 		SRC_STATE *src = src_new(SRC_SINC_BEST_QUALITY, 1, &src_err);
 		assert(src);

@@ -98,8 +98,13 @@ typedef enum {
 } dcaError;
 
 dcaError fDcaLoad(DcAudioConverter *dcac, const char *fname);
-dcaError fWavLoad(DcAudioConverter *dcac, const char *fname);
 dcaError fDcaWrite(dcaConvSound *cs, const char *outfname);
+unsigned fDcaConvertFrequency(unsigned int freq_hz);
+float fDcaUnconvertFrequency(unsigned int freq);
+//Converts a given freqency to AICA closest match
+unsigned fDcaNearestAICAFrequency(unsigned int freq_hz);
+
+dcaError fWavLoad(DcAudioConverter *dcac, const char *fname);
 dcaError fWavWrite(dcaConvSound *cs, const char *outfname);
 
 void DeinterleaveSamples(dcaConvSound *cs, int16_t *samples, unsigned sample_cnt, unsigned channels);

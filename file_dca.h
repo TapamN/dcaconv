@@ -3,6 +3,9 @@
 
 #include <stdint.h>
 
+#define DCA_MINIMUM_SAMPLE_RATE_HZ	172
+#define DCA_MAXIMUM_ADPCM_SAMPLE_RATE_HZ	88200
+
 //Max channels supported by file format
 #define DCA_FILE_MAX_CHANNELS	8
 
@@ -20,7 +23,12 @@
 //Has loop data
 #define DCA_FLAG_LOOPING	(1<<9)
 
-#define DCA_FLAG_LONG_SAMPLE	(1<<10)
+//Sound is longer than AICA maximum length
+#define DCA_FLAG_LONG	(1<<10)
+
+//Largest value that can be stored in DcAudioHeader.sample_rate_hz
+//If the sample rate is greater than this, it must be calculated by converting from DcAudioHeader.sample_rate_aica
+#define DCA_MAX_STORED_SAMPLE_RATE_HZ	((unsigned)((1<<16)-1))
 
 //Bits to write to AICA channel
 #define DCA_AICA_MASK	((DCA_FLAG_FORMAT_MASK<<DCA_FLAG_FORMAT_SHIFT) | DCA_FLAG_LOOPING)
@@ -67,6 +75,11 @@ typedef struct {
 	
 	/*
 		The sample rate of the audio in hertz.
+		
+		If the sample rate is greater than DCA_MAX_SAMPLE_RATE_HZ, 
+		sample_rate_hz will be set to DCA_MAX_SAMPLE_RATE_HZ. To find 
+		the real sample rate, the value in sample_rate_aica must be 
+		converted to Hz.
 	*/
 	uint16_t sample_rate_hz;
 	
