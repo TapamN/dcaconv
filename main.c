@@ -359,7 +359,8 @@ int main(int argc, char **argv) {
 		ErrorExitOn(src_err, "Sample rate conversion error (%s)\n", src_strerror(src_err));
 		
 		//Allocate space to convert to float and store results
-		unsigned new_size = (float)dcac.samples_len * dcac.desired_sample_rate_hz / dcac.sample_rate_hz;
+		float ratio = (float)dcac.desired_sample_rate_hz / dcac.sample_rate_hz;
+		unsigned new_size = dcac.samples_len * ratio;
 		float *in_float = calloc(1, dcac.samples_len * sizeof(float));
 		float *out_float = calloc(1, new_size * sizeof(float));
 		
@@ -394,6 +395,9 @@ int main(int argc, char **argv) {
 		
 		dcac.sample_rate_hz = dcac.desired_sample_rate_hz;
 		dcac.samples_len = new_size;
+		//Letting it just truncate so that loop_end can't possibly go past the end
+		dcac.loop_start *= ratio;
+		dcac.loop_end *= ratio;
 	}
 	
 	//Write output file
