@@ -9,6 +9,7 @@
 dcaError fWavLoad(DcAudioConverter *dcac, const char *fname) {
 	dcaError retval = DCAE_OK;
 	drwav wav;
+	
 	if (!drwav_init_file(&wav, fname, NULL)) {
 		return DCAE_READ_OPEN_ERROR;
 	}
@@ -32,7 +33,7 @@ cleanup:
 	drwav_uninit(&wav);
 	free(interleaved_samples);
 	
-	return DCAE_OK;
+	return retval;
 }
 
 dcaError fWavWrite(DcAudioConverter *dcac, const char *outfname) {
