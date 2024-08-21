@@ -48,7 +48,8 @@ void pcm2adpcm(unsigned char *dst, const short *src, size_t length) {
         int data, val, diff;
 
         /* hign nibble */
-        diff = *src++ - signal;
+        //masking is from https://github.com/superctr/adpcm/blob/master/ymz_codec.h to improve quality
+        diff = (*src++ & ~7) - signal;
         diff = (diff * 8) / step;
 
         val = abs(diff) / 2;
@@ -71,7 +72,8 @@ void pcm2adpcm(unsigned char *dst, const short *src, size_t length) {
         }
 
         /* low nibble */
-        diff = *src++ - signal;
+        //masking is from https://github.com/superctr/adpcm/blob/master/ymz_codec.h to improve quality
+        diff = (*src++ & ~7) - signal;
         diff = (diff * 8) / step;
 
         val = (abs(diff)) / 2;
