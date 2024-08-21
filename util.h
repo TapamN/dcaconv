@@ -1,6 +1,8 @@
 #ifndef UTIL_H
 #define UTIL_H
 
+#include <stdarg.h>
+
 typedef enum dcaLogLevel {
 	//When changing these, make sure to update logtypes[] in dcaLogLocV
 	LOG_NONE,	//Disables logs, do not log to this type
