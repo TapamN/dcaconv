@@ -32,44 +32,34 @@ typedef enum {
 } dcaFormat;
 
 typedef struct {
-	const char *filename;
+	//sample rate of samples
 	unsigned sample_rate_hz;
 	
-	unsigned channels;
+	unsigned channel_cnt;
 	//Samples are always stored here as 16-bit, and converted to final format when writing
 	int16_t *samples[DCAC_MAX_CHANNELS];
 	//Size is in samples, not bytes. Size in bytes will always be this times sizeof(*samples[0])
-	size_t size_samples;
+	size_t samples_len;
 	
 	
 	//The following are used for output:
 	
-	//Format to encode to, not the format .samples is in.
+	//Format to encode to (not the format .samples[] is in, which is always 16-bit PCM)
 	dcaFormat format;
 	//Channels to convert to (if 0, desired channels depends on format)
 	unsigned desired_channels;
-	
+	//sample rate to convert to
 	unsigned desired_sample_rate_hz;
-	//~ float ratio;
 	//Generate DCA file longer than DCAC_MAX_SAMPLES without downsampling
 	bool long_sound;
 	
 	//File has loop if loop_end > loop_start
 	unsigned loop_start, loop_end;
-} dcaConvSound;
-static inline size_t dcaCSSizeBytes(const dcaConvSound *cs) {
-	return cs->size_samples * sizeof(int16_t);
-}
-
-typedef struct {
-	//Format must always noninterleaved 16-bit signed PCM
-	//If source file is not in that format, it must be converted before storing it here
-	dcaConvSound in;
-	
-	//File resulting from conversion
-	dcaConvSound out;
-	
 } DcAudioConverter;
+
+static inline size_t dcaSizeSamplesBytes(const DcAudioConverter *cs) {
+	return cs->samples_len * sizeof(int16_t);
+}
 
 typedef enum {
 	//No error
@@ -98,15 +88,15 @@ typedef enum {
 } dcaError;
 
 dcaError fDcaLoad(DcAudioConverter *dcac, const char *fname);
-dcaError fDcaWrite(dcaConvSound *cs, const char *outfname);
+dcaError fDcaWrite(DcAudioConverter *cs, const char *outfname);
 unsigned fDcaConvertFrequency(unsigned int freq_hz);
 float fDcaUnconvertFrequency(unsigned int freq);
 //Converts a given freqency to AICA closest match
 unsigned fDcaNearestAICAFrequency(unsigned int freq_hz);
 
 dcaError fWavLoad(DcAudioConverter *dcac, const char *fname);
-dcaError fWavWrite(dcaConvSound *cs, const char *outfname);
+dcaError fWavWrite(DcAudioConverter *dcac, const char *outfname);
 
-void DeinterleaveSamples(dcaConvSound *cs, int16_t *samples, unsigned sample_cnt, unsigned channels);
+void DeinterleaveSamples(DcAudioConverter *dcac, int16_t *samples, unsigned sample_cnt, unsigned channels);
 
 #endif

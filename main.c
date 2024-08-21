@@ -67,11 +67,11 @@ const char * GetExtension(const char *name) {
 	return extension;
 }
 
-void DeinterleaveSamples(dcaConvSound *cs, int16_t *samples, unsigned sample_cnt, unsigned channels) {
+void DeinterleaveSamples(DcAudioConverter *dcac, int16_t *samples, unsigned sample_cnt, unsigned channels) {
 	for(unsigned i = 0; i < channels; i++) {
 		int16_t *dst = malloc(sample_cnt * sizeof(int16_t));
 		int16_t *src = samples + i;
-		cs->samples[i] = dst;
+		dcac->samples[i] = dst;
 		
 		for(unsigned j = 0; j < sample_cnt; j++) {
 			dst[j] = src[j*channels];
@@ -84,14 +84,13 @@ void dcaInit(DcAudioConverter *dcac) {
 	
 	memset(dcac, 0, sizeof(*dcac));
 	
-	dcac->out.format = DCAF_AUTO;
+	dcac->format = DCAF_AUTO;
 }
 
 void dcaFree(DcAudioConverter *dcac) {
 	assert(dcac);
 	for(unsigned i = 0; i < DCAC_MAX_CHANNELS; i++) {
-		SAFE_FREE(&dcac->in.samples[i]);
-		SAFE_FREE(&dcac->out.samples[i]);
+		SAFE_FREE(&dcac->samples[i]);
 	}
 }
 
@@ -112,7 +111,7 @@ dcaError GeneratePreview(const char *src_fname, const char *preview_fname) {
 	if (retval) {
 		printf("Error retrieving output file for preview\n");
 	} else {
-		retval = fWavWrite(&dcac.in, preview_fname);
+		retval = fWavWrite(&dcac, preview_fname);
 		printf("Wrote preview to '%s' (errval %u)\n", preview_fname, retval);
 	}
 	dcaFree(dcacp);
@@ -120,57 +119,36 @@ dcaError GeneratePreview(const char *src_fname, const char *preview_fname) {
 	return retval;
 }
 
-/*
-	Frees any samples stored in dst, then allocates copies of samples in src.
-	Also sets channels and size_samples
-	Rest of dst is unchanged
-*/
-void dcaCSCopySamples(const dcaConvSound *src, dcaConvSound *dst) {
-	dst->channels = src->channels;
-	dst->size_samples = src->size_samples;
-	
-	size_t size = dcaCSSizeBytes(src);
-	
-	for(unsigned i = 0; i < DCAC_MAX_CHANNELS; i++) {
-		if (i < src->channels) {
-			SMART_ALLOC(&dst->samples[i], size);
-			memcpy(dst->samples[i], src->samples[i], size);
-		} else {
-			SAFE_FREE(&dst->samples[i]);
-		}
-	}
-}
-
-void dcaCSDownmixMono(dcaConvSound *cs) {
-	assert(cs);
-	assert(cs->channels > 0);
-	for(unsigned c = 0; c < cs->channels; c++)
-		assert(cs->samples[c]);
+void dcaDownmixMono(DcAudioConverter *dcac) {
+	assert(dcac);
+	assert(dcac->channel_cnt > 0);
+	for(unsigned c = 0; c < dcac->channel_cnt; c++)
+		assert(dcac->samples[c]);
 	
 	//If already mono, return
-	if (cs->channels == 1)
+	if (dcac->channel_cnt == 1)
 		return;
 	
 	printf("Downmixing to mono\n");
 	
 	//Average channels together
-	int16_t *newsamples = malloc(dcaCSSizeBytes(cs));
-	for(unsigned i = 0; i < cs->size_samples; i++) {
+	int16_t *newsamples = malloc(dcaSizeSamplesBytes(dcac));
+	for(unsigned i = 0; i < dcac->samples_len; i++) {
 		int val = 0;
-		for(unsigned c = 0; c < cs->channels; c++) {
-			val += cs->samples[c][i];
+		for(unsigned c = 0; c < dcac->channel_cnt; c++) {
+			val += dcac->samples[c][i];
 		}
-		newsamples[i] = val / cs->channels;
+		newsamples[i] = val / dcac->channel_cnt;
 	}
 	
 	//Free old samples
-	for(unsigned c = 0; c < cs->channels; c++) {
-		SAFE_FREE(cs->samples + c);
+	for(unsigned c = 0; c < dcac->channel_cnt; c++) {
+		SAFE_FREE(dcac->samples + c);
 	}
 	
 	//Add new samples to sound
-	cs->channels = 1;
-	cs->samples[0] = newsamples;
+	dcac->channel_cnt = 1;
+	dcac->samples[0] = newsamples;
 }
 
 //https://cfengine.com/blog/2021/optional-arguments-with-getopt-long/
@@ -215,6 +193,8 @@ int main(int argc, char **argv) {
 	DcAudioConverter dcac, *dcacp = &dcac;
 	dcaInit(dcacp);
 	
+	const char *in_fname = NULL;
+	const char *out_fname = NULL;
 	const char *preview = NULL;
 	
 	//Parse command line parameters
@@ -252,42 +232,42 @@ int main(int argc, char **argv) {
 			return 0;
 			break;
 		case 'i':
-			dcac.in.filename = options.optarg;
+			in_fname = options.optarg;
 			break;
 		case 'o':
-			dcac.out.filename = options.optarg;
+			out_fname = options.optarg;
 			break;
 		case 'p':
 			preview = options.optarg;
 			break;
 		case 'f':
-			dcac.out.format = GetOptMap(out_sound_format, ARR_SIZE(out_sound_format), options.optarg, -1, "invalid format\n");
+			dcac.format = GetOptMap(out_sound_format, ARR_SIZE(out_sound_format), options.optarg, -1, "invalid format\n");
 			break;
 		case 'S':
-			dcac.out.desired_channels = 2;
+			dcac.desired_channels = 2;
 			break;
 		case 'l':
-			dcac.out.long_sound = true;
+			dcac.long_sound = true;
 			break;
 		case 's':
-			if (sscanf(options.optarg, "%u", &dcac.out.loop_start) != 1)  {
+			if (sscanf(options.optarg, "%u", &dcac.loop_start) != 1)  {
 				ErrorExit("Invalid loop start. Must be in sample position. The first sample is 0.\n");
 			}
 			break;
 		case 'e':
-			if (sscanf(options.optarg, "%u", &dcac.out.loop_end) != 1)  {
+			if (sscanf(options.optarg, "%u", &dcac.loop_end) != 1)  {
 				ErrorExit("Invalid loop end. Must be in sample position. The first sample is 0.\n");
 			}
 			break;
 		case 'c':
-			if ((sscanf(options.optarg, "%u", &dcac.out.desired_channels) != 1) 
-					|| (dcac.out.desired_channels == 0) || (dcac.out.desired_channels > DCAC_MAX_CHANNELS))  {
+			if ((sscanf(options.optarg, "%u", &dcac.desired_channels) != 1) 
+					|| (dcac.desired_channels == 0) || (dcac.desired_channels > DCAC_MAX_CHANNELS))  {
 				ErrorExit("invalid number of channels, should be in the range [0, %u]\n", DCAC_MAX_CHANNELS);
 			}
 			break;
 		case 'r':
-			if ((sscanf(options.optarg, "%u", &dcac.out.desired_sample_rate_hz) != 1) 
-					|| (dcac.out.desired_sample_rate_hz == 0) || (dcac.out.desired_sample_rate_hz > 44100))  {
+			if ((sscanf(options.optarg, "%u", &dcac.desired_sample_rate_hz) != 1) 
+					|| (dcac.desired_sample_rate_hz == 0) || (dcac.desired_sample_rate_hz > 44100))  {
 				ErrorExit("invalid sample rate, should be in the range [0, 44100]\n");
 			}
 			break;
@@ -298,53 +278,46 @@ int main(int argc, char **argv) {
 	}
 	
 	//Load input file
-	const char *inext = GetExtension(dcac.in.filename);
+	const char *inext = GetExtension(in_fname);
 	ErrorExitOn(inext[0] == 0, "Unknown file type (no extension)\n");
 	dcaError loadresult = DCAE_OK;
 	
 	if (strcasecmp(inext, ".wav") == 0) {
-		loadresult = fWavLoad(dcacp, dcac.in.filename);
+		loadresult = fWavLoad(dcacp, in_fname);
 	} else if (strcasecmp(inext, ".dca") == 0) {
-		loadresult = fDcaLoad(dcacp, dcac.in.filename);
+		loadresult = fDcaLoad(dcacp, in_fname);
 	} else {
 		ErrorExit("Unknown file type\n");
 	}
 	ErrorExitOn(loadresult, "error loading file %i\n", loadresult);
 	
-	assert(dcac.in.channels > 0);
-	assert(dcac.in.sample_rate_hz > 0);
-	assert(dcac.in.samples[0] != NULL);
+	assert(dcac.channel_cnt > 0);
+	assert(dcac.sample_rate_hz > 0);
+	assert(dcac.samples[0] != NULL);
 	//TODO create silence instead of error
-	ErrorExitOn(dcac.in.size_samples == 0, "zero length sound probably doesn't work well on AICA\n");
-	
-	//Assign input samples to output
-	dcaCSCopySamples(&dcac.in, &dcac.out);
-	
-	//Convert input samples to 16-bit PCM output samples at out rate
-	//Actual compression happens later
-	dcac.out.sample_rate_hz = dcac.in.sample_rate_hz;
+	ErrorExitOn(dcac.samples_len == 0, "zero length sound probably doesn't work well on AICA\n");
 	
 	//If no sample rate is specified, default to source file rate
-	if (dcac.out.desired_sample_rate_hz == 0)
-		dcac.out.desired_sample_rate_hz = dcac.in.sample_rate_hz;
+	if (dcac.desired_sample_rate_hz == 0)
+		dcac.desired_sample_rate_hz = dcac.sample_rate_hz;
 	
 	//Get output extension
-	const char *outext = GetExtension(dcac.out.filename);
+	const char *outext = GetExtension(out_fname);
 	
 	if (strcasecmp(outext, ".dca") == 0) {
 		//If user hasn't specified the number of channels, default to one
-		if (dcac.out.desired_channels == 0)
-			dcac.out.desired_channels = 1;
+		if (dcac.desired_channels == 0)
+			dcac.desired_channels = 1;
 		
 		//Default to ADPCM
-		if (dcac.out.format == DCAF_AUTO)
-			dcac.out.format = DCAF_ADPCM;
+		if (dcac.format == DCAF_AUTO)
+			dcac.format = DCAF_ADPCM;
 		
-		unsigned expected_size = (float)dcac.out.size_samples * dcac.out.desired_sample_rate_hz / dcac.out.sample_rate_hz;
-		if (!dcac.out.long_sound && expected_size > DCAC_MAX_SAMPLES) {
-			float ratio = (float)DCAC_MAX_SAMPLES / dcac.out.size_samples;
-			unsigned new_rate = fDcaNearestAICAFrequency(dcac.out.sample_rate_hz * ratio);
-			unsigned desired_size_samples = (float)dcac.out.size_samples * new_rate / dcac.out.sample_rate_hz;
+		unsigned expected_size = (float)dcac.samples_len * dcac.desired_sample_rate_hz / dcac.sample_rate_hz;
+		if (!dcac.long_sound && expected_size > DCAC_MAX_SAMPLES) {
+			float ratio = (float)DCAC_MAX_SAMPLES / dcac.samples_len;
+			unsigned new_rate = fDcaNearestAICAFrequency(dcac.sample_rate_hz * ratio);
+			unsigned desired_size_samples = (float)dcac.samples_len * new_rate / dcac.sample_rate_hz;
 			
 			ErrorExitOn(new_rate < DCA_MINIMUM_SAMPLE_RATE_HZ, "This sound is too long for the AICA to handle directly.\n"
 				"To allow long sounds, use the --long option\n");
@@ -352,67 +325,67 @@ int main(int argc, char **argv) {
 			printf("Input file is long (%u samples). AICA only directly supports sounds shorter than %u samples.\n"
 				"Reducing frequency from %u hz to %u hz to fit within AICA limits. Resulting file will be %u samples long\n"
 				"To allow long sounds, use the --long option\n",
-				(unsigned)dcac.out.size_samples,
+				(unsigned)dcac.samples_len,
 				(1<<16)-1,
-				dcac.out.desired_sample_rate_hz,
+				dcac.desired_sample_rate_hz,
 				new_rate,
 				desired_size_samples);
-			dcac.out.desired_sample_rate_hz = new_rate;
+			dcac.desired_sample_rate_hz = new_rate;
 		}
 		
 		//The floating point format of the AICA's frequency rate register results in some values getting rounded.
 		//Do the rounding here to so resampling calculations will better match actual output
-		dcac.out.desired_sample_rate_hz = fDcaNearestAICAFrequency(dcac.out.desired_sample_rate_hz);
+		dcac.desired_sample_rate_hz = fDcaNearestAICAFrequency(dcac.desired_sample_rate_hz);
 		
 		
-		if (dcac.out.desired_sample_rate_hz < 172) {
-			printf("Sample rate of %u is too low. AICA does not support sample rates less than 172 hz. Using 172 hz sample rate\n", dcac.out.desired_sample_rate_hz);
-			dcac.out.desired_sample_rate_hz = 172;
+		if (dcac.desired_sample_rate_hz < 172) {
+			printf("Sample rate of %u is too low. AICA does not support sample rates less than 172 hz. Using 172 hz sample rate\n", dcac.desired_sample_rate_hz);
+			dcac.desired_sample_rate_hz = 172;
 		}
 		
-		if (dcac.out.format == DCAF_ADPCM && dcac.out.desired_sample_rate_hz > DCA_MAXIMUM_ADPCM_SAMPLE_RATE_HZ) {
+		if (dcac.format == DCAF_ADPCM && dcac.desired_sample_rate_hz > DCA_MAXIMUM_ADPCM_SAMPLE_RATE_HZ) {
 			printf("Sample rate of %u is too high for ADPCM. AICA ADPCM does not support sample rates over %u hz, reducing sample rate to %u",
-				dcac.out.desired_sample_rate_hz,
+				dcac.desired_sample_rate_hz,
 				DCA_MAXIMUM_ADPCM_SAMPLE_RATE_HZ,
 				DCA_MAXIMUM_ADPCM_SAMPLE_RATE_HZ);
-			dcac.out.desired_sample_rate_hz = DCA_MAXIMUM_ADPCM_SAMPLE_RATE_HZ;
+			dcac.desired_sample_rate_hz = DCA_MAXIMUM_ADPCM_SAMPLE_RATE_HZ;
 		}
 	} else if (strcasecmp(outext, ".wav") == 0) {
-		if (dcac.out.desired_channels == 0)
-			dcac.out.desired_channels = dcac.in.channels;
+		if (dcac.desired_channels == 0)
+			dcac.desired_channels = dcac.channel_cnt;
 		
-		if (dcac.out.format == DCAF_AUTO)
-			dcac.out.format = DCAF_PCM16;
+		if (dcac.format == DCAF_AUTO)
+			dcac.format = DCAF_PCM16;
 	} else {
 		ErrorExit("Unknown output file type\n");
 	}
 	
-	if (dcac.out.desired_channels > dcac.in.channels) {
+	if (dcac.desired_channels > dcac.channel_cnt) {
 		printf("Warning: Specifed number of output channels of %u is greater than number "
 			"of source file channels of %u. Output will have %u channels.\n",
-			dcac.out.channels,
-			dcac.in.channels,
-			dcac.out.channels);
-		dcac.out.desired_channels = dcac.in.channels;
+			dcac.channel_cnt,
+			dcac.channel_cnt,
+			dcac.channel_cnt);
+		dcac.desired_channels = dcac.channel_cnt;
 	}
 	
 	//Handle channel conversion
-	if (dcac.out.desired_channels == dcac.out.channels) {
+	if (dcac.desired_channels == dcac.channel_cnt) {
 		//Nothing to do in this case
-	} else if (dcac.out.desired_channels == 1) {
-		dcaCSDownmixMono(&dcac.out);
-	} else if (dcac.out.desired_channels == 2 && dcac.out.channels == 1) {
+	} else if (dcac.desired_channels == 1) {
+		dcaDownmixMono(&dcac);
+	} else if (dcac.desired_channels == 2 && dcac.channel_cnt == 1) {
 		//pad out to stereo. why is user doing this?
 		assert(0 && "todo no mono to stereo yet");
 	} else {
 		ErrorExit("Cannot convert from %u channels to %u channels\n",
-			dcac.in.channels,
-			dcac.out.channels);
+			dcac.channel_cnt,
+			dcac.channel_cnt);
 	}
 	
 	//Adjust sample rate
-	if (dcac.out.desired_sample_rate_hz != dcac.out.sample_rate_hz) {
-		printf("Converting input sample rate from %u hz to %u hz\n", dcac.out.sample_rate_hz, dcac.out.desired_sample_rate_hz);
+	if (dcac.desired_sample_rate_hz != dcac.sample_rate_hz) {
+		printf("Converting input sample rate from %u hz to %u hz\n", dcac.sample_rate_hz, dcac.desired_sample_rate_hz);
 		int src_err = 0;
 		SRC_STATE *src = src_new(SRC_SINC_BEST_QUALITY, 1, &src_err);
 		assert(src);
@@ -422,28 +395,28 @@ int main(int argc, char **argv) {
 		}
 		
 		//Allocate space to convert to float and store results
-		unsigned new_size = (float)dcac.out.size_samples * dcac.out.desired_sample_rate_hz / dcac.out.sample_rate_hz;
-		float *in_float = calloc(1, dcac.out.size_samples * sizeof(float));
+		unsigned new_size = (float)dcac.samples_len * dcac.desired_sample_rate_hz / dcac.sample_rate_hz;
+		float *in_float = calloc(1, dcac.samples_len * sizeof(float));
 		float *out_float = calloc(1, new_size * sizeof(float));
 		
 		//Resample every channel
-		for(unsigned i = 0; i < dcac.out.channels; i++) {
+		for(unsigned i = 0; i < dcac.channel_cnt; i++) {
 			//Convert to float
-			src_short_to_float_array(dcac.out.samples[i], in_float, dcac.out.size_samples);
+			src_short_to_float_array(dcac.samples[i], in_float, dcac.samples_len);
 			
 			//Preform resampling
 			SRC_DATA srcd;
 			srcd.data_in = in_float;
 			srcd.data_out = out_float;
-			srcd.input_frames = dcac.out.size_samples;
+			srcd.input_frames = dcac.samples_len;
 			srcd.output_frames = new_size;
-			srcd.src_ratio = (float)dcac.out.desired_sample_rate_hz / dcac.out.sample_rate_hz;
+			srcd.src_ratio = (float)dcac.desired_sample_rate_hz / dcac.sample_rate_hz;
 			srcd.end_of_input = 1;
 			src_process(src, &srcd);
 			
 			//Convert to 16-bit
-			SMART_ALLOC(&dcac.out.samples[i], new_size * sizeof(int16_t));
-			src_float_to_short_array(out_float, dcac.out.samples[i], new_size);
+			SMART_ALLOC(&dcac.samples[i], new_size * sizeof(int16_t));
+			src_float_to_short_array(out_float, dcac.samples[i], new_size);
 			
 			src_reset(src);
 		}
@@ -457,16 +430,16 @@ int main(int argc, char **argv) {
 		
 		src_delete(src);
 		
-		dcac.out.sample_rate_hz = dcac.out.desired_sample_rate_hz;
-		dcac.out.size_samples = new_size;
+		dcac.sample_rate_hz = dcac.desired_sample_rate_hz;
+		dcac.samples_len = new_size;
 	}
 	
 	//Write output file
 	dcaError write_error = DCAE_UNKNOWN;
 	if (strcasecmp(outext, ".dca") == 0) {
-		write_error = fDcaWrite(&dcac.out, dcac.out.filename);
+		write_error = fDcaWrite(&dcac, out_fname);
 	} else if (strcasecmp(outext, ".wav") == 0) {
-		write_error = fWavWrite(&dcac.out, dcac.out.filename);
+		write_error = fWavWrite(&dcac, out_fname);
 	} else {
 		ErrorExit("Unsupported output file type '%s'\n", outext);
 	}
@@ -477,7 +450,7 @@ int main(int argc, char **argv) {
 	
 	//Write preview
 	if (preview && !write_error) {
-		GeneratePreview(dcac.out.filename, preview);
+		GeneratePreview(out_fname, preview);
 	}
 	
 	dcaFree(dcacp);

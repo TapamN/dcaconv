@@ -73,11 +73,11 @@ dcaError fDcaLoad(DcAudioConverter *dcac, const char *fname) {
 	unsigned channels = data->flags & DCA_FLAG_CHANNEL_COUNT_MASK;
 	unsigned sample_cnt = data->length;
 	void *filesamples = (char*)data + fDaGetHeaderSize(data);
-	size_t channel_size = (dcac->in.size_samples + 31) & ~0x1f;
+	size_t channel_size = (dcac->samples_len + 31) & ~0x1f;
 	
-	dcac->in.sample_rate_hz = fDcaUnconvertFrequency(data->sample_rate_aica);
-	dcac->in.channels = channels;
-	dcac->in.size_samples = sample_cnt;
+	dcac->sample_rate_hz = fDcaUnconvertFrequency(data->sample_rate_aica);
+	dcac->channel_cnt = channels;
+	dcac->samples_len = sample_cnt;
 	
 	printf("DCA file loaded has %u channel%s with %u samples at %u hz\n", channels, channels>1?"s":"", sample_cnt, data->sample_rate_hz);
 	
@@ -86,26 +86,25 @@ dcaError fDcaLoad(DcAudioConverter *dcac, const char *fname) {
 	if (format == DCAF_PCM16) {
 		channel_size *= sizeof(int16_t);
 		for(unsigned c = 0; c < channels; c++) {
-			dcac->in.samples[c] = calloc(sample_cnt, sizeof(int16_t));
+			dcac->samples[c] = calloc(sample_cnt, sizeof(int16_t));
 			void *channel_ptr = (char*)filesamples + channel_size * c;
-			memcpy(dcac->in.samples[c], channel_ptr, sample_cnt * sizeof(int16_t));
+			memcpy(dcac->samples[c], channel_ptr, sample_cnt * sizeof(int16_t));
 		}
 	} else if (format == DCAF_PCM8) {
 		channel_size *= sizeof(int8_t);
 		for(unsigned c = 0; c < channels; c++) {
-			dcac->in.samples[c] = calloc(sample_cnt, sizeof(int16_t));
+			dcac->samples[c] = calloc(sample_cnt, sizeof(int16_t));
 			int8_t *channel_ptr = (int8_t*)((char*)filesamples + channel_size * c);
 			for(unsigned i = 0; i < sample_cnt; i++) {
-				dcac->in.samples[c][i] = channel_ptr[i] * 256;
+				dcac->samples[c][i] = channel_ptr[i] * 256;
 			}
 		}
 	} else if (format == DCAF_ADPCM) {
-		channel_size = (dcac->in.size_samples/2 + 31) & ~0x1f;
-		printf("ch size: %u\n", (unsigned)channel_size);
+		channel_size = (dcac->samples_len/2 + 31) & ~0x1f;
 		for(unsigned c = 0; c < channels; c++) {
-			dcac->in.samples[c] = calloc(sample_cnt, sizeof(int16_t));
+			dcac->samples[c] = calloc(sample_cnt, sizeof(int16_t));
 			uint8_t *channel_ptr = (int8_t*)filesamples + channel_size * c;
-			adpcm2pcm(dcac->in.samples[c], channel_ptr, sample_cnt);
+			adpcm2pcm(dcac->samples[c], channel_ptr, sample_cnt);
 		}
 	} else {
 		goto readerror;
@@ -113,26 +112,27 @@ dcaError fDcaLoad(DcAudioConverter *dcac, const char *fname) {
 	
 	free(data);
 	return DCAE_OK;
+	
 readerror:
 	free(data);
 	return DCAE_READ_ERROR;
 }
 
-dcaError fDcaWrite(dcaConvSound *cs, const char *outfname) {
+dcaError fDcaWrite(DcAudioConverter *cs, const char *outfname) {
 	assert(cs);
 	assert(outfname);
-	assert(cs->channels > 0);
-	for(unsigned i = 0; i < cs->channels; i++)
+	assert(cs->channel_cnt > 0);
+	for(unsigned i = 0; i < cs->channel_cnt; i++)
 		assert(cs->samples[i] != NULL);
 	
-	if (!cs->long_sound && cs->size_samples > DCAC_MAX_SAMPLES)
+	if (!cs->long_sound && cs->samples_len > DCAC_MAX_SAMPLES)
 		return DCAE_TOO_LONG;
 	
-	if (cs->channels > DCA_FILE_MAX_CHANNELS)
+	if (cs->channel_cnt > DCA_FILE_MAX_CHANNELS)
 		return DCAE_TOO_MANY_CHANNELS;
 	
 	//Calculate size of a channel in bytes
-	unsigned channelsize = cs->size_samples;
+	unsigned channelsize = cs->samples_len;
 	if (cs->format == DCAF_PCM16) {
 		channelsize *= 2;
 	} else if (cs->format == DCAF_PCM8) {
@@ -152,20 +152,20 @@ dcaError fDcaWrite(dcaConvSound *cs, const char *outfname) {
 	void *samples[DCA_FILE_MAX_CHANNELS];
 	if (cs->format == DCAF_PCM16) {
 		//Already in target format, just copy them
-		for(unsigned i = 0; i < cs->channels; i++) {
+		for(unsigned i = 0; i < cs->channel_cnt; i++) {
 			samples[i] = calloc(1, channelsize);
-			memcpy(samples[i], cs->samples[i], cs->size_samples * 2);
+			memcpy(samples[i], cs->samples[i], cs->samples_len * 2);
 		}
 	} else if (cs->format == DCAF_PCM8) {
 		//TODO add dithering?
-		for(unsigned i = 0; i < cs->channels; i++) {
+		for(unsigned i = 0; i < cs->channel_cnt; i++) {
 			samples[i] = calloc(1, channelsize);
-			ConvertTo8bit(cs->samples[i], samples[i], cs->size_samples);
+			ConvertTo8bit(cs->samples[i], samples[i], cs->samples_len);
 		}
 	} else if (cs->format == DCAF_ADPCM) {
-		for(unsigned i = 0; i < cs->channels; i++) {
+		for(unsigned i = 0; i < cs->channel_cnt; i++) {
 			samples[i] = calloc(1, channelsize);
-			pcm2adpcm(samples[i], cs->samples[i], cs->size_samples);
+			pcm2adpcm(samples[i], cs->samples[i], cs->samples_len);
 		}
 	}
 	
@@ -173,18 +173,18 @@ dcaError fDcaWrite(dcaConvSound *cs, const char *outfname) {
 	DcAudioHeader head;
 	memset(&head, 0, sizeof(head));
 	memcpy(head.fourcc, DCA_FOURCC, sizeof(head.fourcc));
-	head.chunk_size = sizeof(head) + channelsize * cs->channels;
+	head.chunk_size = sizeof(head) + channelsize * cs->channel_cnt;
 	head.version = 0;
 	head.header_size = 0;
 	head.flags = 
 		((cs->format & DCA_FLAG_FORMAT_MASK) << DCA_FLAG_FORMAT_SHIFT) |
-		(cs->channels & DCA_FLAG_CHANNEL_COUNT_MASK);
+		(cs->channel_cnt & DCA_FLAG_CHANNEL_COUNT_MASK);
 	if (cs->long_sound)
 		head.flags |= DCA_FLAG_LONG;
 	head.sample_rate_aica = fDcaConvertFrequency(cs->sample_rate_hz);
 	unsigned converted_sample_rate = fDcaNearestAICAFrequency(cs->sample_rate_hz);
 	head.sample_rate_hz = converted_sample_rate <= DCA_MAX_STORED_SAMPLE_RATE_HZ ? converted_sample_rate : DCA_MAX_STORED_SAMPLE_RATE_HZ;
-	head.length = cs->size_samples;
+	head.length = cs->samples_len;
 	
 	if (cs->loop_end > cs->loop_start) {
 		head.flags |= DCA_FLAG_LOOPING;
@@ -199,15 +199,21 @@ dcaError fDcaWrite(dcaConvSound *cs, const char *outfname) {
 		return DCAE_WRITE_OPEN_ERROR;
 	
 	written += fwrite(&head, 1, sizeof(head), f);
-	for(unsigned i = 0; i < cs->channels; i++)
+	for(unsigned i = 0; i < cs->channel_cnt; i++)
 		written += fwrite(samples[i], 1, channelsize, f);
 	fclose(f);
 	
+	const char *fmt = "ADPCM";
+	if (cs->format == DCAF_PCM8) fmt = "PCM8";
+	if (cs->format == DCAF_PCM16) fmt = "PCM16";
+	printf("Wrote %u channel%s of %u samples at %u hz, in %s format\n",
+		cs->channel_cnt, cs->channel_cnt>1?"s":"", head.length, converted_sample_rate, fmt);
+		
 	//~ printf("Exoected size: %u\n", (unsigned)head.chunk_size);
 	//~ printf("Written: %u\n", written);
 	(void)written;
 	
-	for(unsigned i = 0; i < cs->channels; i++)
+	for(unsigned i = 0; i < cs->channel_cnt; i++)
 		free(samples[i]);
 	
 	

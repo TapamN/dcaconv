@@ -19,12 +19,10 @@ dcaError fWavLoad(DcAudioConverter *dcac, const char *fname) {
 		printf("Short read of %u samples out of %u\n", (unsigned)sample_cnt, (unsigned)wav.totalPCMFrameCount);
 	}
 	
-	dcac->in.format = DCAF_PCM16;
-	dcac->in.filename = fname;
-	dcac->in.sample_rate_hz = wav.sampleRate;
-	dcac->in.channels = wav.channels;
-	dcac->in.size_samples = sample_cnt;
-	DeinterleaveSamples(&dcac->in, interleaved_samples, sample_cnt, wav.channels);
+	dcac->sample_rate_hz = wav.sampleRate;
+	dcac->channel_cnt = wav.channels;
+	dcac->samples_len = sample_cnt;
+	DeinterleaveSamples(dcac, interleaved_samples, sample_cnt, wav.channels);
 	
 	//~ printf("Wave got %u samples and %u channels\n",(unsigned)sample_cnt, (unsigned)wav.channels);
 	
@@ -34,35 +32,35 @@ dcaError fWavLoad(DcAudioConverter *dcac, const char *fname) {
 	return DCAE_OK;
 }
 
-dcaError fWavWrite(dcaConvSound *cs, const char *outfname) {
+dcaError fWavWrite(DcAudioConverter *dcac, const char *outfname) {
 	drwav wav;
 	drwav_data_format format;
 	
 	format.container = drwav_container_riff;
 	format.format = DR_WAVE_FORMAT_PCM;
-	format.channels = cs->channels;
-	format.sampleRate = cs->sample_rate_hz;
+	format.channels = dcac->channel_cnt;
+	format.sampleRate = dcac->sample_rate_hz;
 	format.bitsPerSample = 16;
 	
-	if (drwav_init_file_write_sequential(&wav, outfname, &format, cs->size_samples, NULL) == 0) {
+	if (drwav_init_file_write_sequential(&wav, outfname, &format, dcac->samples_len, NULL) == 0) {
 		return DCAE_WRITE_OPEN_ERROR;
 	}
 	
 	//Interleave samples
-	int16_t *interleaved = malloc(cs->size_samples * cs->channels * sizeof(int16_t));
-	const unsigned ch_cnt = cs->channels;
-	for(unsigned i = 0; i < cs->size_samples; i++) {
+	int16_t *interleaved = malloc(dcac->samples_len * dcac->channel_cnt * sizeof(int16_t));
+	const unsigned ch_cnt = dcac->channel_cnt;
+	for(unsigned i = 0; i < dcac->samples_len; i++) {
 		for(unsigned c = 0; c < ch_cnt; c++) {
-			interleaved[i*ch_cnt+c] = cs->samples[c][i];
+			interleaved[i*ch_cnt+c] = dcac->samples[c][i];
 		}
 	}
 	
 	//Write
-	drwav_uint64 samples_written = drwav_write_pcm_frames(&wav, cs->size_samples, interleaved);
+	drwav_uint64 samples_written = drwav_write_pcm_frames(&wav, dcac->samples_len, interleaved);
 	
 	//Clean up
 	drwav_uninit(&wav);
 	free(interleaved);
 	
-	return samples_written == cs->size_samples ? DCAE_OK : DCAE_WRITE_ERROR;
+	return samples_written == dcac->samples_len ? DCAE_OK : DCAE_WRITE_ERROR;
 }
