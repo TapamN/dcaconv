@@ -54,7 +54,7 @@ typedef struct {
 	//Generate DCA file longer than DCAC_MAX_SAMPLES without downsampling
 	bool long_sound;
 	
-	//File has loop if loop_end > loop_start
+	bool looping;
 	unsigned loop_start, loop_end;
 } DcAudioConverter;
 

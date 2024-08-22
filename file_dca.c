@@ -186,7 +186,7 @@ dcaError fDcaWrite(DcAudioConverter *cs, const char *outfname) {
 	head.sample_rate_hz = converted_sample_rate <= DCA_MAX_STORED_SAMPLE_RATE_HZ ? converted_sample_rate : DCA_MAX_STORED_SAMPLE_RATE_HZ;
 	head.length = cs->samples_len;
 	
-	if (cs->loop_end > cs->loop_start) {
+	if (cs->looping) {
 		head.flags |= DCA_FLAG_LOOPING;
 		head.loop_start = cs->loop_start;
 		head.loop_end = cs->loop_end-1;

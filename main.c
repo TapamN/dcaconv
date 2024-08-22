@@ -161,8 +161,11 @@ int main(int argc, char **argv) {
 	const char *out_fname = NULL;
 	const char *preview = NULL;
 	int trim_threshold = 1*256;
-	bool trim_start = false;
-	bool trim_end = false;
+	bool trim_silence_start = false;
+	bool trim_silence_end = false;
+	bool trim_loop_end = false;
+	bool loop_start_set = false;
+	bool loop_end_set = false;
 	
 	//Parse command line parameters
 	struct optparse options;
@@ -179,13 +182,13 @@ int main(int argc, char **argv) {
 		{"channels", 'c', OPTPARSE_REQUIRED},
 		{"stereo", 'S', OPTPARSE_NONE},
 		
+		{"loop", 'l', OPTPARSE_NONE},
 		{"loop-start", 's', OPTPARSE_REQUIRED},
 		{"loop-end", 'e', OPTPARSE_REQUIRED},
 		
 		{"trim", 't', OPTPARSE_OPTIONAL},
-		{"long", 'l', OPTPARSE_NONE},
-		{"down-sample", 'd', OPTPARSE_NONE},
-		{"no-loop-end-trim", 'E', OPTPARSE_NONE},
+		{"long", 'L', OPTPARSE_NONE},
+		{"trim-loop-end", 'E', OPTPARSE_NONE},
 		
 		{"verbose", 'v', OPTPARSE_NONE},
 		{"version", 'V', OPTPARSE_NONE},
@@ -213,15 +216,22 @@ int main(int argc, char **argv) {
 		case 'S':
 			dcac.desired_channels = 2;
 			break;
-		case 'l':
+		case 'L':
 			dcac.long_sound = true;
 			break;
+		case 'l':
+			dcac.looping = true;
+			break;
 		case 's':
+			dcac.looping = true;
+			loop_start_set = true;
 			if (sscanf(options.optarg, "%u", &dcac.loop_start) != 1)  {
 				ErrorExit("Invalid loop start. Must be in sample position. The first sample is 0.\n");
 			}
 			break;
 		case 'e':
+			dcac.looping = true;
+			loop_end_set = true;
 			if (sscanf(options.optarg, "%u", &dcac.loop_end) != 1)  {
 				ErrorExit("Invalid loop end. Must be in sample position. The first sample is 0.\n");
 			}
@@ -242,20 +252,23 @@ int main(int argc, char **argv) {
 				if (options.optarg) {
 					int trim = GetOptMap(trim_type, ARR_SIZE(trim_type), options.optarg, -1, "invalid trim setting\n");
 					if (trim == TRIM_BOTH) {
-						trim_start = true;
-						trim_end = true;
+						trim_silence_start = true;
+						trim_silence_end = true;
 					} else if (trim == TRIM_START) {
-						trim_start = true;
+						trim_silence_start = true;
 					} else if (trim == TRIM_END) {
-						trim_end = true;
+						trim_silence_end = true;
 					} else {
 						assert(0);
 					}
 				} else {
-					trim_start = true;
-					trim_end = true;
+					trim_silence_start = true;
+					trim_silence_end = true;
 				}
 			} break;
+		case 'E':
+			trim_loop_end = true;
+			break;
 		case 'v':
 			dcaCurrentLogLevel = LOG_INFO;
 			
@@ -304,34 +317,50 @@ int main(int argc, char **argv) {
 	assert(dcac.samples[0] != NULL);
 	
 	//If no sample rate is specified, default to source file rate
+	if (dcac.desired_sample_rate_hz == 0 && dcac.sample_rate_hz > 44100)
+		dcac.desired_sample_rate_hz = 44100;
 	if (dcac.desired_sample_rate_hz == 0)
 		dcac.desired_sample_rate_hz = dcac.sample_rate_hz;
 	
+	//Set loop end if not specified
+	if (dcac.loop_end == 0)
+		dcac.loop_end = dcac.samples_len;
+	ErrorExitOn(dcac.loop_start >= dcac.samples_len, "Loop start is past end of file\n");
+	ErrorExitOn(dcac.loop_start == dcac.loop_end, "Loop start is equal to loop end\n");
+	ErrorExitOn(dcac.loop_start > dcac.loop_end, "Loop start is after loop end\n");
+	if (dcac.loop_end > dcac.samples_len) {
+		dcaLog(LOG_WARNING, "\nLoop end (%u) is past end of file (%u), loop end will be set to end\n", dcac.loop_end, dcac.samples_len);
+		dcac.loop_end = dcac.samples_len;
+	}
 	
 	//Trim initial/trailing silence
-	if (trim_start || trim_end) {
+	if (trim_silence_start || trim_silence_end) {
 		unsigned new_start = 0, new_end = dcac.samples_len;
 		
-		if (trim_start) {
-			for(unsigned i = 0; i < dcac.samples_len; i++) {
+		//If loop points are explicitly set, do not trim past them, otherwise trim as much as possible
+		//and move the loop points in bounds
+		if (trim_silence_start) {
+			unsigned max_start_trim = loop_start_set ? dcac.loop_start : dcac.samples_len;
+			for(unsigned i = 0; i < max_start_trim; i++) {
 				for(unsigned c = 0; c < dcac.channel_cnt; c++) {
 					if (abs(dcac.samples[c][i]) > trim_threshold) {
+						new_start = i;
 						goto exit_scan_start;
 					}
 				}
-				new_start++;
 			}
 		exit_scan_start:;
 		}
 		
-		if (trim_end) {
-			for(unsigned i = dcac.samples_len; i > 0; i--) {
+		if (trim_silence_end) {
+			unsigned max_end_trim = loop_end_set ? dcac.loop_end : 0;
+			for(unsigned i = dcac.samples_len; i > max_end_trim; i--) {
 				for(unsigned c = 0; c < dcac.channel_cnt; c++) {
 					if (abs(dcac.samples[c][i]) > trim_threshold) {
+						new_end = i;
 						goto exit_scan_end;
 					}
 				}
-				new_end--;
 			}
 		exit_scan_end:;
 		}
@@ -340,7 +369,7 @@ int main(int argc, char **argv) {
 			new_end = new_start;
 		
 		unsigned new_len = new_end - new_start;
-		dcaLog(LOG_INFO, "New start: 0 -> %u, new end: %u -> %u, new len %u\n", new_start, dcac.samples_len, new_end, new_len);
+		dcaLog(LOG_INFO, "Trimming results: New start: 0 -> %u, new end: %u -> %u, new len %u\n", new_start, dcac.samples_len, new_end, new_len);
 		
 		//Rebuild samples arrays with start/end removed
 		for(unsigned c = 0; c < dcac.channel_cnt; c++) {
@@ -373,22 +402,25 @@ int main(int argc, char **argv) {
 		if (dcac.format == DCAF_AUTO)
 			dcac.format = DCAF_ADPCM;
 		
-		unsigned expected_size = (float)dcac.samples_len * dcac.desired_sample_rate_hz / dcac.sample_rate_hz;
+		//If we are trimming the end of the loop, use that for length instead of current length
+		unsigned len = trim_loop_end ? dcac.loop_end : dcac.samples_len;
+		unsigned expected_size = (float)len * dcac.desired_sample_rate_hz / dcac.sample_rate_hz;
 		if (!dcac.long_sound && expected_size > DCAC_MAX_SAMPLES) {
 			//TODO the -32 is a hack to deal with some rounding issues when calculating sample length. find a better fix later
-			float ratio = (float)(DCAC_MAX_SAMPLES-32) / dcac.samples_len;
+			float ratio = (float)(DCAC_MAX_SAMPLES-32) / len;
 			unsigned new_rate = fDcaNearestAICAFrequency(dcac.sample_rate_hz * ratio);
-			unsigned desired_size_samples = (float)dcac.samples_len * new_rate / dcac.sample_rate_hz;
+			unsigned desired_size_samples = (float)len * new_rate / dcac.sample_rate_hz;
 			
 			ErrorExitOn(new_rate < DCA_MINIMUM_SAMPLE_RATE_HZ, "This sound is too long for the AICA to handle directly.\n"
 				"To allow long sounds, use the --long option\n");
 			
-			dcaLog(LOG_WARNING, "\nInput file is long (%u samples). AICA only directly supports sounds shorter than %u samples.\n"
+			dcaLog(LOG_WARNING, "\nInput file is long (%u samples%s). AICA only directly supports sounds shorter than %u samples.\n"
 				"Reducing frequency from %u hz to %u hz to fit within AICA limits. Resulting file will be %u samples long\n"
 				"To allow long sounds, use the --long option. Playing long sounds will require software assistance to stream samples.\n",
-				(unsigned)dcac.samples_len,
+				(unsigned)len,
+				trim_loop_end ? " after trimming end of loop" : "",
 				(1<<16)-1,
-				dcac.desired_sample_rate_hz,
+				dcac.sample_rate_hz,
 				new_rate,
 				desired_size_samples);
 			dcac.desired_sample_rate_hz = new_rate;
@@ -493,6 +525,20 @@ int main(int argc, char **argv) {
 		dcac.loop_start *= ratio;
 		dcac.loop_end *= ratio;
 	}
+	
+	//Trim off anything after the end of the loop and fix up any other loop problems
+	if (trim_loop_end && dcac.looping && dcac.loop_end < dcac.samples_len)
+		dcac.samples_len = dcac.loop_end;
+	if (dcac.loop_end > dcac.samples_len)
+		dcac.loop_end = dcac.samples_len;
+	if (dcac.loop_start >= dcac.loop_end) {
+		dcaLog(LOG_WARNING, "Loop start is after loop end, disabling looping\n");
+		dcac.loop_start = 0;
+		dcac.looping = false;
+	}
+	
+	if (dcac.looping)
+		dcaLog(LOG_INFO, "\nFinal loop points: %u to %u\n", dcac.loop_start, dcac.loop_end);
 	
 	//Write output file
 	dcaError write_error = DCAE_UNKNOWN;
