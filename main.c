@@ -122,6 +122,17 @@ static const OptionMap out_sound_format[] = {
 	{"adpcm", DCAF_ADPCM},
 };
 
+enum {
+	TRIM_START,
+	TRIM_END,
+	TRIM_BOTH,
+};
+static const OptionMap trim_type[] = {
+	{"start", TRIM_START},
+	{"end", TRIM_END},
+	{"both", TRIM_BOTH},
+};
+
 //Search through OptionMap for match and return it's value.
 //If name is not found and invalid_msg is NULL, it returns default_value 
 //If name is not found and invalid_msg is not NULL, it prints invalid_msg and exits
@@ -149,6 +160,9 @@ int main(int argc, char **argv) {
 	const char *in_fname = NULL;
 	const char *out_fname = NULL;
 	const char *preview = NULL;
+	int trim_threshold = 1*256;
+	bool trim_start = false;
+	bool trim_end = false;
 	
 	//Parse command line parameters
 	struct optparse options;
@@ -224,6 +238,24 @@ int main(int argc, char **argv) {
 				ErrorExit("invalid sample rate, should be in the range [0, 44100]\n");
 			}
 			break;
+		case 't': OPTARG_FIX_UP; {
+				if (options.optarg) {
+					int trim = GetOptMap(trim_type, ARR_SIZE(trim_type), options.optarg, -1, "invalid trim setting\n");
+					if (trim == TRIM_BOTH) {
+						trim_start = true;
+						trim_end = true;
+					} else if (trim == TRIM_START) {
+						trim_start = true;
+					} else if (trim == TRIM_END) {
+						trim_end = true;
+					} else {
+						assert(0);
+					}
+				} else {
+					trim_start = true;
+					trim_end = true;
+				}
+			} break;
 		case 'v':
 			dcaCurrentLogLevel = LOG_INFO;
 			
@@ -270,14 +302,69 @@ int main(int argc, char **argv) {
 	assert(dcac.channel_cnt > 0);
 	assert(dcac.sample_rate_hz > 0);
 	assert(dcac.samples[0] != NULL);
-	//TODO create silence instead of error
-	ErrorExitOn(dcac.samples_len == 0, "zero length sound probably doesn't work well on AICA\n");
 	
 	//If no sample rate is specified, default to source file rate
 	if (dcac.desired_sample_rate_hz == 0)
 		dcac.desired_sample_rate_hz = dcac.sample_rate_hz;
 	
+	
+	//Trim initial/trailing silence
+	if (trim_start || trim_end) {
+		unsigned new_start = 0, new_end = dcac.samples_len;
+		
+		if (trim_start) {
+			for(unsigned i = 0; i < dcac.samples_len; i++) {
+				for(unsigned c = 0; c < dcac.channel_cnt; c++) {
+					if (abs(dcac.samples[c][i]) > trim_threshold) {
+						goto exit_scan_start;
+					}
+				}
+				new_start++;
+			}
+		exit_scan_start:;
+		}
+		
+		if (trim_end) {
+			for(unsigned i = dcac.samples_len; i > 0; i--) {
+				for(unsigned c = 0; c < dcac.channel_cnt; c++) {
+					if (abs(dcac.samples[c][i]) > trim_threshold) {
+						goto exit_scan_end;
+					}
+				}
+				new_end--;
+			}
+		exit_scan_end:;
+		}
+		//TODO think of how to handle this better
+		if (new_end < new_start)
+			new_end = new_start;
+		
+		unsigned new_len = new_end - new_start;
+		dcaLog(LOG_INFO, "New start: 0 -> %u, new end: %u -> %u, new len %u\n", new_start, dcac.samples_len, new_end, new_len);
+		
+		//Rebuild samples arrays with start/end removed
+		for(unsigned c = 0; c < dcac.channel_cnt; c++) {
+			int16_t *newsamples = malloc(new_len * sizeof(int16_t));
+			memcpy(newsamples, dcac.samples[c] + new_start, new_len * sizeof(int16_t));
+			free(dcac.samples[c]);
+			dcac.samples[c] = newsamples;
+		}
+		
+		dcac.samples_len = new_len;
+		
+		//Fix up loops
+		dcac.loop_start -= new_start;
+		if (dcac.loop_start > dcac.samples_len)
+			dcac.loop_start = 0;
+		dcac.loop_end -= new_start;
+		if (dcac.loop_end > dcac.samples_len)
+			dcac.loop_end = dcac.samples_len;
+	}
+	
 	if (strcasecmp(outext, ".dca") == 0) {
+		//TODO maybe create a few samples of silence instead of error?
+		ErrorExitOn(dcac.samples_len == 0, "zero length sound probably doesn't work well on AICA\n");
+		
 		//If user hasn't specified the number of channels, default to one
 		if (dcac.desired_channels == 0)
 			dcac.desired_channels = 1;
