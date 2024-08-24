@@ -31,8 +31,8 @@ float fDcaUnconvertFrequency(unsigned int freq) {
 	
 	return newfreq;
 }
-unsigned fDcaNearestAICAFrequency(unsigned int freq_hz) {
-	return fDcaUnconvertFrequency(fDcaConvertFrequency(freq_hz)) + 0.5;
+unsigned fDcaToAICAFrequency(unsigned int freq_hz) {
+	return fDcaUnconvertFrequency(fDcaConvertFrequency(freq_hz));
 }
 
 void ConvertTo8bit(const int16_t *src, int8_t *dst, size_t sample_cnt) {
@@ -125,8 +125,11 @@ dcaError fDcaWrite(DcAudioConverter *cs, const char *outfname) {
 	for(unsigned i = 0; i < cs->channel_cnt; i++)
 		assert(cs->samples[i] != NULL);
 	
-	if (!cs->long_sound && cs->samples_len > DCAC_MAX_SAMPLES)
+	//TODO +50 is a hack to give some slack to length check
+	if (!cs->long_sound && cs->samples_len > (DCAC_MAX_SAMPLES+50)) {
+		dcaLog(LOG_WARNING, "Output is %u samples\n", cs->samples_len);
 		return DCAE_TOO_LONG;
+	}
 	
 	if (cs->channel_cnt > DCA_FILE_MAX_CHANNELS)
 		return DCAE_TOO_MANY_CHANNELS;
@@ -182,7 +185,7 @@ dcaError fDcaWrite(DcAudioConverter *cs, const char *outfname) {
 	if (cs->long_sound)
 		head.flags |= DCA_FLAG_LONG;
 	head.sample_rate_aica = fDcaConvertFrequency(cs->sample_rate_hz);
-	unsigned converted_sample_rate = fDcaNearestAICAFrequency(cs->sample_rate_hz);
+	unsigned converted_sample_rate = fDcaToAICAFrequency(cs->sample_rate_hz);
 	head.sample_rate_hz = converted_sample_rate <= DCA_MAX_STORED_SAMPLE_RATE_HZ ? converted_sample_rate : DCA_MAX_STORED_SAMPLE_RATE_HZ;
 	head.length = cs->samples_len;
 	

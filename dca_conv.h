@@ -19,7 +19,7 @@
 	trouble with looping if at the maximum length, so the max here is a 
 	bit less.
 */
-#define DCAC_MAX_SAMPLES	(64*1024-64)
+#define DCAC_MAX_SAMPLES	(64*1024-256)
 
 typedef enum {
 	//The first three (PCM16, PCM8, and ADPCM) match up to the AICA's formats. Do not change this.
@@ -93,7 +93,7 @@ dcaError fDcaWrite(DcAudioConverter *cs, const char *outfname);
 unsigned fDcaConvertFrequency(unsigned int freq_hz);
 float fDcaUnconvertFrequency(unsigned int freq);
 //Converts a given freqency to AICA closest match
-unsigned fDcaNearestAICAFrequency(unsigned int freq_hz);
+unsigned fDcaToAICAFrequency(unsigned int freq_hz);
 
 dcaError fWavLoad(DcAudioConverter *dcac, const char *fname);
 dcaError fWavWrite(DcAudioConverter *dcac, const char *outfname);

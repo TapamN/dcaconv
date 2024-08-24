@@ -316,10 +316,11 @@ int main(int argc, char **argv) {
 	assert(dcac.sample_rate_hz > 0);
 	assert(dcac.samples[0] != NULL);
 	
-	//If no sample rate is specified, default to source file rate
-	if (dcac.desired_sample_rate_hz == 0 && dcac.sample_rate_hz > 44100)
+	//For .DCA, if no sample rate is specified and source sample rate is >44.1Khz, reduce output to 44.1Khz
+	//Otherwise, if no sample rate is specified, default to source file rate
+	if (strcmp(outext, ".dca") && dcac.desired_sample_rate_hz == 0 && dcac.sample_rate_hz > 44100)
 		dcac.desired_sample_rate_hz = 44100;
-	if (dcac.desired_sample_rate_hz == 0)
+	else if (dcac.desired_sample_rate_hz == 0)
 		dcac.desired_sample_rate_hz = dcac.sample_rate_hz;
 	
 	//Set loop end if not specified
@@ -406,9 +407,9 @@ int main(int argc, char **argv) {
 		unsigned len = trim_loop_end ? dcac.loop_end : dcac.samples_len;
 		unsigned expected_size = (float)len * dcac.desired_sample_rate_hz / dcac.sample_rate_hz;
 		if (!dcac.long_sound && expected_size > DCAC_MAX_SAMPLES) {
-			//TODO the -32 is a hack to deal with some rounding issues when calculating sample length. find a better fix later
-			float ratio = (float)(DCAC_MAX_SAMPLES-32) / len;
-			unsigned new_rate = fDcaNearestAICAFrequency(dcac.sample_rate_hz * ratio);
+			//TODO the -64 is a hack to deal with some rounding issues when calculating sample length. find a better fix later
+			float ratio = (float)(DCAC_MAX_SAMPLES-64) / len;
+			unsigned new_rate = fDcaToAICAFrequency(dcac.sample_rate_hz * ratio);
 			unsigned desired_size_samples = (float)len * new_rate / dcac.sample_rate_hz;
 			
 			ErrorExitOn(new_rate < DCA_MINIMUM_SAMPLE_RATE_HZ, "This sound is too long for the AICA to handle directly.\n"
@@ -428,7 +429,7 @@ int main(int argc, char **argv) {
 		
 		//The floating point format of the AICA's frequency rate register results in some values getting rounded.
 		//Do the rounding here to so resampling calculations will better match actual output
-		dcac.desired_sample_rate_hz = fDcaNearestAICAFrequency(dcac.desired_sample_rate_hz);
+		dcac.desired_sample_rate_hz = fDcaToAICAFrequency(dcac.desired_sample_rate_hz);
 		
 		
 		if (dcac.desired_sample_rate_hz < 172) {
