@@ -149,7 +149,7 @@ dcaError fDcaWrite(DcAudioConverter *cs, const char *outfname) {
 	}
 	
 	//Round channel size up to multiple of 32
-	channelsize = (channelsize+31) & ~0x1f;
+	channelsize = (channelsize+DCA_ALIGNMENT_MASK) & ~DCA_ALIGNMENT_MASK;
 	
 	//Convert to target format
 	void *samples[DCA_FILE_MAX_CHANNELS];

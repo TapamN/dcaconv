@@ -3,6 +3,9 @@
 
 #include <stdint.h>
 
+#define DCA_ALIGNMENT	32
+#define DCA_ALIGNMENT_MASK	0x1f
+
 #define DCA_MINIMUM_SAMPLE_RATE_HZ	172
 #define DCA_MAXIMUM_ADPCM_SAMPLE_RATE_HZ	88200
 
@@ -13,6 +16,7 @@
 
 #define DCA_FLAG_CHANNEL_COUNT_MASK	0x7
 
+//These flags match the AICA's format selection bits
 #define DCA_FLAG_FORMAT_PCM16	0x0
 #define DCA_FLAG_FORMAT_PCM8	0x1
 #define DCA_FLAG_FORMAT_ADPCM	0x2
@@ -123,6 +127,48 @@ typedef struct {
 */
 static inline size_t fDaGetHeaderSize(const DcAudioHeader *dca) {
 	return (dca->header_size+1) * 32;
+}
+
+/*
+	Returns the sample format used.
+	
+	Returns one of
+		DCA_FLAG_FORMAT_PCM16
+		DCA_FLAG_FORMAT_PCM8
+		DCA_FLAG_FORMAT_ADPCM
+*/
+static inline unsigned fDaGetSampleFormat(const DcAudioHeader *dca) {
+	return (dca->flags >> DCA_FLAG_FORMAT_SHIFT) & DCA_FLAG_FORMAT_MASK;
+}
+
+/*
+	Returns the size of a channel in samples
+*/
+static inline size_t fDaGetChannelSizeSamples(const DcAudioHeader *dca) {
+	return dca->length;
+}
+
+/*
+	Returns the size of a channel in bytes
+*/
+static inline size_t fDaGetChannelSizeBytes(const DcAudioHeader *dca) {
+	size_t sz = dca->length;
+	unsigned fmt = fDaGetSampleFormat(dca);
+	if (fmt == DCA_FLAG_FORMAT_PCM16) {
+		sz *= 2;
+	} else if (fmt == DCA_FLAG_FORMAT_ADPCM) {
+		//Round up to whole byte
+		sz = (sz+1) / 2;
+	}
+	return (sz + DCA_ALIGNMENT_MASK) & ~DCA_ALIGNMENT_MASK;
+}
+
+/*
+	Returns a pointer to the start of the samples for a channel.
+*/
+static inline void * fDaGetSamples(DcAudioHeader *dca, unsigned channel) {
+	char * ch = (char*)dca + fDaGetHeaderSize(dca);
+	return (void*)(ch + fDaGetChannelSizeBytes(dca) * channel);
 }
 
 #endif
