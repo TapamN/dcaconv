@@ -318,7 +318,7 @@ int main(int argc, char **argv) {
 	
 	//For .DCA, if no sample rate is specified and source sample rate is >44.1Khz, reduce output to 44.1Khz
 	//Otherwise, if no sample rate is specified, default to source file rate
-	if (strcmp(outext, ".dca") && dcac.desired_sample_rate_hz == 0 && dcac.sample_rate_hz > 44100)
+	if (strcasecmp(outext, ".dca") == 0 && dcac.desired_sample_rate_hz == 0 && dcac.sample_rate_hz > 44100)
 		dcac.desired_sample_rate_hz = 44100;
 	else if (dcac.desired_sample_rate_hz == 0)
 		dcac.desired_sample_rate_hz = dcac.sample_rate_hz;
