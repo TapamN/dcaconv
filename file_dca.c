@@ -3,34 +3,12 @@
 #include <assert.h>
 #include <math.h>
 
+#define DCAUDIO_IMPLEMENTATION
 #include "file_dca.h"
+
 #include "dca_conv.h"
 
-unsigned fDcaConvertFrequency(unsigned int freq_hz) {
-	uint32_t freq_lo, freq_base = 5644800;
-	int freq_hi = 7;
 
-	while(freq_hz < freq_base && freq_hi > -8) {
-		freq_base >>= 1;
-		freq_hi--;
-	}
-
-	//~ freq_lo = (freq_hz << 10) / freq_base;
-	freq_lo = ((freq_hz << 10) + freq_base/2) / freq_base;
-	return (freq_hi << 11) | (freq_lo & 1023);
-}
-float fDcaUnconvertFrequency(unsigned int freq) {
-	freq &= 0x7fff;
-	
-	int freq_hi = (freq >> 11) & 0xf;
-	unsigned int freq_lo = freq & 0x3ff;
-	if (freq_hi & 0x8)
-		freq_hi |= 0xfffffff0;
-	
-	float newfreq = 44100 * pow(2, freq_hi) * (1+(float)freq_lo/1024);
-	
-	return newfreq;
-}
 unsigned fDcaToAICAFrequency(unsigned int freq_hz) {
 	return fDcaUnconvertFrequency(fDcaConvertFrequency(freq_hz));
 }
@@ -70,40 +48,35 @@ dcaError fDcaLoad(DcAudioConverter *dcac, const char *fname) {
 	if (memcmp(data->fourcc, DCA_FOURCC, sizeof(data->fourcc)) != 0)
 		goto readerror;
 	
-	unsigned channels = data->flags & DCA_FLAG_CHANNEL_COUNT_MASK;
-	unsigned sample_cnt = data->length;
-	void *filesamples = (char*)data + fDaGetHeaderSize(data);
-	size_t channel_size = (dcac->samples_len + 31) & ~0x1f;
+	unsigned channels = fDaGetChannelCount(data);
+	unsigned sample_cnt = fDaGetChannelSizeSamples(data);
 	
 	dcac->sample_rate_hz = fDcaUnconvertFrequency(data->sample_rate_aica);
 	dcac->channel_cnt = channels;
 	dcac->samples_len = sample_cnt;
 	
-	dcaLog(LOG_INFO, "DCA file loaded has %u channel%s with %u samples at %u hz\n", channels, channels>1?"s":"", sample_cnt, data->sample_rate_hz);
+	dcaLog(LOG_INFO, "DCA file loaded has %u channel%s with %u samples at %u hz\n", channels, channels>1?"s":"", sample_cnt, (unsigned)fDaCalcSampleRateHz(data));
 	
 	//Convert to 16-bit PCM
 	unsigned format = (data->flags >> DCA_FLAG_FORMAT_SHIFT) & DCA_FLAG_FORMAT_MASK;
 	if (format == DCAF_PCM16) {
-		channel_size *= sizeof(int16_t);
 		for(unsigned c = 0; c < channels; c++) {
 			dcac->samples[c] = calloc(sample_cnt, sizeof(int16_t));
-			void *channel_ptr = (char*)filesamples + channel_size * c;
+			void *channel_ptr = fDaGetChannelSamples(data, c);
 			memcpy(dcac->samples[c], channel_ptr, sample_cnt * sizeof(int16_t));
 		}
 	} else if (format == DCAF_PCM8) {
-		channel_size *= sizeof(int8_t);
 		for(unsigned c = 0; c < channels; c++) {
 			dcac->samples[c] = calloc(sample_cnt, sizeof(int16_t));
-			int8_t *channel_ptr = (int8_t*)((char*)filesamples + channel_size * c);
+			int8_t *channel_ptr = (int8_t*)fDaGetChannelSamples(data, c);;
 			for(unsigned i = 0; i < sample_cnt; i++) {
 				dcac->samples[c][i] = channel_ptr[i] * 256;
 			}
 		}
 	} else if (format == DCAF_ADPCM) {
-		channel_size = (dcac->samples_len/2 + 31) & ~0x1f;
 		for(unsigned c = 0; c < channels; c++) {
 			dcac->samples[c] = calloc(sample_cnt, sizeof(int16_t));
-			uint8_t *channel_ptr = (int8_t*)filesamples + channel_size * c;
+			uint8_t *channel_ptr = (uint8_t*)fDaGetChannelSamples(data, c);;
 			adpcm2pcm(dcac->samples[c], channel_ptr, sample_cnt);
 		}
 	} else {
@@ -178,7 +151,6 @@ dcaError fDcaWrite(DcAudioConverter *cs, const char *outfname) {
 	memcpy(head.fourcc, DCA_FOURCC, sizeof(head.fourcc));
 	head.chunk_size = sizeof(head) + channelsize * cs->channel_cnt;
 	head.version = 0;
-	head.header_size = 0;
 	head.flags = 
 		((cs->format & DCA_FLAG_FORMAT_MASK) << DCA_FLAG_FORMAT_SHIFT) |
 		(cs->channel_cnt & DCA_FLAG_CHANNEL_COUNT_MASK);
@@ -186,13 +158,14 @@ dcaError fDcaWrite(DcAudioConverter *cs, const char *outfname) {
 		head.flags |= DCA_FLAG_LONG;
 	head.sample_rate_aica = fDcaConvertFrequency(cs->sample_rate_hz);
 	unsigned converted_sample_rate = fDcaToAICAFrequency(cs->sample_rate_hz);
-	head.sample_rate_hz = converted_sample_rate <= DCA_MAX_STORED_SAMPLE_RATE_HZ ? converted_sample_rate : DCA_MAX_STORED_SAMPLE_RATE_HZ;
-	head.length = cs->samples_len;
+	head.total_length = cs->samples_len;
 	
 	if (cs->looping) {
 		head.flags |= DCA_FLAG_LOOPING;
 		head.loop_start = cs->loop_start;
-		head.loop_end = cs->loop_end-1;
+		head.loop_end = cs->loop_end;
+	} else {
+		head.loop_end = cs->samples_len;
 	}
 	
 	//Write to disk
@@ -210,7 +183,7 @@ dcaError fDcaWrite(DcAudioConverter *cs, const char *outfname) {
 	if (cs->format == DCAF_PCM8) fmt = "PCM8";
 	if (cs->format == DCAF_PCM16) fmt = "PCM16";
 	dcaLog(LOG_PROGRESS, "Wrote %u channel%s of %u samples at %u hz, in %s format\n",
-		cs->channel_cnt, cs->channel_cnt>1?"s":"", head.length, converted_sample_rate, fmt);
+		cs->channel_cnt, cs->channel_cnt>1?"s":"", head.total_length, converted_sample_rate, fmt);
 	
 	
 	for(unsigned i = 0; i < cs->channel_cnt; i++)

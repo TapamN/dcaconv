@@ -3,6 +3,20 @@
 
 #include <stdint.h>
 
+/*
+	Most functions provided by this header are provided as static inline, 
+	as they are simple enough that there's no point in preforming an 
+	actual function call for.
+	
+	Some more complex functions are not static inline. This header always 
+	provides their prototypes, but their implementation is optionally 
+	output, to prevent errors from having multiple definitions of the 
+	same fucnction.
+	
+	To generate them, #define DCAUDIO_IMPLEMENTATION before including 
+	this header. This should only be done in one file.
+*/
+
 #define DCA_ALIGNMENT	32
 #define DCA_ALIGNMENT_MASK	0x1f
 
@@ -14,6 +28,7 @@
 
 #define DCA_FOURCC	"DcAF"
 
+#define DCA_FLAG_CHANNEL_COUNT_SHIFT	0
 #define DCA_FLAG_CHANNEL_COUNT_MASK	0x7
 
 //These flags match the AICA's format selection bits
@@ -30,11 +45,7 @@
 //Sound is longer than AICA maximum length
 #define DCA_FLAG_LONG	(1<<10)
 
-//Largest value that can be stored in DcAudioHeader.sample_rate_hz
-//If the sample rate is greater than this, it must be calculated by converting from DcAudioHeader.sample_rate_aica
-#define DCA_MAX_STORED_SAMPLE_RATE_HZ	((unsigned)((1<<16)-1))
-
-//Bits to write to AICA channel
+//Bits from flags to write to AICA channel
 #define DCA_AICA_MASK	((DCA_FLAG_FORMAT_MASK<<DCA_FLAG_FORMAT_SHIFT) | DCA_FLAG_LOOPING)
 
 typedef struct {
@@ -51,7 +62,9 @@ typedef struct {
 	char fourcc[4];
 	
 	/*
-		Size of file, including header. This is different to IFF, which does not include the size of the fourcc and size fields.
+		Size of file, including header. This is different to IFF, 
+		which does not include the size of the fourcc and size 
+		fields.
 		
 		Size is always rounded up to 32 bytes
 	*/
@@ -63,14 +76,9 @@ typedef struct {
 	uint8_t version;
 	
 	/*
-		Size of the header in 32-byte units, minus one. This is how far from the start of the header the texture data starts.
-		The header can be 32 bytes to 8KB large.
-		
-		A header_size of 0 means the texture data starts 32 bytes after the start of the header, a size of 3 means 128 bytes...
-		
-		This allows for backwards compatible changes to the size of the header, or adding additional user data.
+		Should always be 0 in current version.
 	*/
-	uint8_t header_size;
+	uint8_t padding0[3];
 	
 	/*
 		TODO explain DCA_FLAG_*
@@ -78,56 +86,94 @@ typedef struct {
 	uint16_t flags;
 	
 	/*
-		The sample rate of the audio in hertz.
-		
-		If the sample rate is greater than DCA_MAX_SAMPLE_RATE_HZ, 
-		sample_rate_hz will be set to DCA_MAX_SAMPLE_RATE_HZ. To find 
-		the real sample rate, the value in sample_rate_aica must be 
-		converted to Hz.
-	*/
-	uint16_t sample_rate_hz;
-	
-	/*
 		The sample rate of the audio stored in the 15-bit floating point format used by the AICA.
 	*/
 	uint16_t sample_rate_aica;
 	
 	/*
-		Length of the audio in samples.
+		Total length of the audio in samples, including any samples 
+		past the end of the loop point.
+		
+		**********************IMPORTANT**********************
+		The AICA interprets the end of the sound to be one sample 
+		later than one would normally expect, so the value written to 
+		the AICA length register must be this value MINUS ONE.
+		
+		Example:
+		
+		With a sound that is 100 samples long, the value stored in 
+		length will be 100, but the value given to the AICA must be 
+		99.
+		**********************IMPORTANT**********************
+		
+		If a sound does not loop, length will also be stored in 
+		loop_end. Normally, the value to give to the AICA for the 
+		length of the sample can always be found in loop_end. This 
+		value is only useful if calculating the size of a channel, or 
+		if you have a looping sample that you want to play without 
+		looping.
 		
 		The AICA does not natively support sounds longer than 2^16 
 		samples. If the sound is longer than that, the 
 		DCA_FLAG_LONG_SAMPLE bit will be set in the flags. Some form 
 		of streaming must be used for longer sounds.
 	*/
-	uint32_t length;
+	uint32_t total_length;	//NOTE: You probably want to use loop_end value for AICA!
 	
 	/*
-		The start of any loop used by this sound. The position is 
-		specified in samples.
+		The start of any loop used by this sound, specified in samples.
 		
 		The AICA does not natively support sounds longer than 2^16 
-		samples. See the description for length for more details.
+		samples. See the description for total_length for more details.
 	*/
 	uint32_t loop_start;
 	
 	/*
-		What sample to trigger the loop on. This sample gets played, but not any afterwards.
+		The trigger point of a loop, specified in samples. The sample 
+		at this position should not be played. This is an absolute 
+		position, and not relative to loop_start.
+		
+		**********************IMPORTANT**********************
+		The AICA interprets the end of the sound to be one sample 
+		later than one would normally expect, so the value written to 
+		the AICA length register must be this value MINUS ONE.
+		
+		Example:
+		
+		With a sound that loops after 100 samples, the value stored 
+		in loop_end will be 100, but the value given to the AICA must 
+		be 99.
+		**********************IMPORTANT**********************
+		
+		If the sound does not loop, this is will be equal to length.
 		
 		The AICA does not natively support sounds longer than 2^16 
-		samples. See the description for length for more details.
+		samples. See the description for total_length for more details.
 	*/
 	uint32_t loop_end;
 	
-	uint32_t padding;
+	/*
+		Not used in the current version
+	*/
+	uint32_t padding1;
+	
+	/*
+		Sample data follows the header.
+		
+		The data for each channel is stored seperated from one 
+		another, and not interleaved. For stereo sounds, channel 0 
+		contains the left channel, and channel 1 contains the right 
+		channel.
+		
+		Each channel is padded out to 32 bytes for compatability with DMA.
+		
+		The size of each channel, in bytes, can be calculated using 
+		fDaCalcChannelSizeBytes.
+		
+		The size of all channels combined, in bytes, can be 
+		calculated using fDaGetDataSize.
+	*/
 } DcAudioHeader;
-
-/*
-	Returns the size of the header in bytes
-*/
-static inline size_t fDaGetHeaderSize(const DcAudioHeader *dca) {
-	return (dca->header_size+1) * 32;
-}
 
 /*
 	Returns the sample format used.
@@ -142,17 +188,126 @@ static inline unsigned fDaGetSampleFormat(const DcAudioHeader *dca) {
 }
 
 /*
-	Returns the size of a channel in samples
+	Returns number of channels stored in file
 */
-static inline size_t fDaGetChannelSizeSamples(const DcAudioHeader *dca) {
-	return dca->length;
+static inline unsigned fDaGetChannelCount(const DcAudioHeader *dca) {
+	return (dca->flags >> DCA_FLAG_CHANNEL_COUNT_SHIFT) & DCA_FLAG_CHANNEL_COUNT_MASK;
 }
 
 /*
-	Returns the size of a channel in bytes
+	Returns 0 if sound has no loop, or non-zero if sound has loops
 */
-static inline size_t fDaGetChannelSizeBytes(const DcAudioHeader *dca) {
-	size_t sz = dca->length;
+static inline unsigned fDaIsLooping(const DcAudioHeader *dca) {
+	return dca->flags & DCA_FLAG_LOOPING;
+}
+
+/*
+	Returns the size of file, minus header size. It's the size of all samples.
+*/
+static inline size_t fDaGetDataSize(const DcAudioHeader *dca) {
+	return dca->chunk_size - sizeof(DcAudioHeader);
+}
+
+/*
+	Returns length of sound in samples.
+	
+	If the sound does not loop, this is the entire sound.
+	
+	If the sound does loop, this is value for the loop end, and does not 
+	include any samples stored after the loop end.
+*/
+static inline size_t fDaGetLength(const DcAudioHeader *dca) {
+	//Yes, this is correct. loop_end will contain the correct value even if looping isn't used.
+	return dca->loop_end;
+}
+
+/*
+	Returns loop start position.
+	
+	If the sound does not loop, this will be zero.
+*/
+static inline size_t fDaGetLoopStart(const DcAudioHeader *dca) {
+	return dca->loop_start;
+}
+
+/*
+	Returns value to write to AICA length register.
+	
+	If the sound does not loop, this is the entire sound.
+	
+	If the sound does loop, this is value for the loop end, and does not 
+	include any samples stored after the loop end.
+*/
+static inline size_t fDaGetAICALength(const DcAudioHeader *dca) {
+	//Yes, this is correct. loop_end will contain the correct value even if looping isn't used.
+	return dca->loop_end - 1;
+}
+
+/*
+	Returns value to write to AICA length register when playing a looping 
+	sound with looping disabled.
+*/
+static inline size_t fDaGetAICALengthDisableLoop(const DcAudioHeader *dca) {
+	return dca->total_length - 1;
+}
+
+/*
+	Returns the total size of the sound in samples. Includes any samples 
+	past the loop end, if they exist.
+*/
+static inline size_t fDaGetChannelSizeSamples(const DcAudioHeader *dca) {
+	return dca->total_length;
+}
+
+/*
+	Returns the size of a single channel in bytes
+	
+	Each channel is padded to be 32 bytes long.
+*/
+size_t fDaCalcChannelSizeBytes(const DcAudioHeader *dca);
+
+/*
+	Converts a sample rate to an AICA pitch value
+*/
+unsigned fDcaConvertFrequency(unsigned int freq_hz);
+
+/*
+	Converts an AICA pitch value to hertz
+*/
+float fDcaUnconvertFrequency(unsigned int freq);
+
+/*
+	Returns the size of a single channel, in bytes. This includes any padding.
+*/
+size_t fDaCalcChannelSizeBytes(const DcAudioHeader *dca);
+
+/*
+	Returns a pointer to the start of the samples for a channel.
+*/
+static inline void * fDaGetChannelSamples(DcAudioHeader *dca, unsigned channel) {
+	char * ch = (char*)(dca+1);
+	return (void*)(ch + fDaCalcChannelSizeBytes(dca) * channel);
+}
+
+/*
+	Returns the sample rate of the sound in hertz.
+	
+	This is a floating point value, 
+*/
+static inline float fDaCalcSampleRateHz(const DcAudioHeader *dca) {
+	return fDcaUnconvertFrequency(dca->sample_rate_aica);
+}
+
+/*
+	Returns the sample rate value used by AICA.
+*/
+static inline int fDaGetSampleRateAICA(const DcAudioHeader *dca) {
+	return fDcaUnconvertFrequency(dca->sample_rate_aica);
+}
+
+#ifdef DCAUDIO_IMPLEMENTATION
+size_t fDaCalcChannelSizeBytes(const DcAudioHeader *dca) {
+	size_t sz = dca->total_length;
 	unsigned fmt = fDaGetSampleFormat(dca);
 	if (fmt == DCA_FLAG_FORMAT_PCM16) {
 		sz *= 2;
@@ -163,12 +318,32 @@ static inline size_t fDaGetChannelSizeBytes(const DcAudioHeader *dca) {
 	return (sz + DCA_ALIGNMENT_MASK) & ~DCA_ALIGNMENT_MASK;
 }
 
-/*
-	Returns a pointer to the start of the samples for a channel.
-*/
-static inline void * fDaGetSamples(DcAudioHeader *dca, unsigned channel) {
-	char * ch = (char*)dca + fDaGetHeaderSize(dca);
-	return (void*)(ch + fDaGetChannelSizeBytes(dca) * channel);
+unsigned fDcaConvertFrequency(unsigned int freq_hz) {
+	uint32_t freq_lo, freq_base = 5644800;
+	int freq_hi = 7;
+
+	while(freq_hz < freq_base && freq_hi > -8) {
+		freq_base >>= 1;
+		freq_hi--;
+	}
+
+	//~ freq_lo = (freq_hz << 10) / freq_base;
+	freq_lo = ((freq_hz << 10) + freq_base/2) / freq_base;
+	return (freq_hi << 11) | (freq_lo & 1023);
 }
+
+float fDcaUnconvertFrequency(unsigned int freq) {
+	freq &= 0x7fff;
+	
+	int freq_hi = (freq >> 11) & 0xf;
+	unsigned int freq_lo = freq & 0x3ff;
+	if (freq_hi & 0x8)
+		freq_hi |= 0xfffffff0;
+	
+	float newfreq = 44100 * pow(2, freq_hi) * (1+(float)freq_lo/1024);
+	
+	return newfreq;
+}
+#endif
 
 #endif
