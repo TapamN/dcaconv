@@ -11,9 +11,11 @@ MYFLAGS=-Wall -Wextra -Wno-unused-parameter -Wno-sign-compare -Ilibsamplerate/in
 MYFLAGS+=-DPACKAGE=\"dcaconv\" -DVERSION=\"1\" -DHAVE_STDBOOL_H -DENABLE_SINC_BEST_CONVERTER
 
 MYCPPFLAGS=$(MYFLAGS)
-MYCFLAGS=$(MYFLAGS) -Wno-pointer-sign
+MYCFLAGS=$(MYFLAGS)
 #~ DEBUGOPT= -Og -g
 DEBUGOPT= -O3
+
+.PHONY: all clean install README
 
 %.o: %.c
 	gcc $(CFLAGS) $(MYCFLAGS) $(DEBUGOPT) -c $< -o $@
@@ -25,6 +27,12 @@ DEBUGOPT= -O3
 $(TARGET): $(OBJS)
 	gcc -o $(TARGET) \
 		$(OBJS) $(PROGMAIN) -lm -lstdc++
+
+README: readme_unformatted.txt
+	fmt -s readme_unformatted.txt > README
+
+install: $(TARGET)
+	install ./dcaconv ~/.local/bin/dcaconv
 
 clean:
 	rm -f $(TARGET) $(OBJS)
