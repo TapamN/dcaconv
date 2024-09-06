@@ -10,7 +10,7 @@
 
 
 unsigned fDcaToAICAFrequency(unsigned int freq_hz) {
-	return fDcaUnconvertFrequency(fDcaConvertFrequency(freq_hz));
+	return fDaUnconvertFrequency(fDaConvertFrequency(freq_hz));
 }
 
 void ConvertTo8bit(const int16_t *src, int8_t *dst, size_t sample_cnt) {
@@ -37,7 +37,7 @@ dcaError fDcaLoad(DcAudioConverter *dcac, const char *fname) {
 	fseek(f, 0, SEEK_SET);
 	
 	//Load
-	DcAudioHeader *data = malloc(filesize);
+	fDcAudioHeader *data = malloc(filesize);
 	size_t amountread = fread(data, 1, filesize, f);
 	fclose(f);
 	
@@ -49,13 +49,13 @@ dcaError fDcaLoad(DcAudioConverter *dcac, const char *fname) {
 		goto readerror;
 	
 	unsigned channels = fDaGetChannelCount(data);
-	unsigned sample_cnt = fDaGetChannelSizeSamples(data);
+	unsigned sample_cnt = fDaGetTotalLength(data);
 	
-	dcac->sample_rate_hz = fDcaUnconvertFrequency(data->sample_rate_aica);
+	dcac->sample_rate_hz = fDaCalcSampleRateHz(data);
 	dcac->channel_cnt = channels;
 	dcac->samples_len = sample_cnt;
 	
-	dcaLog(LOG_INFO, "DCA file loaded has %u channel%s with %u samples at %u hz\n", channels, channels>1?"s":"", sample_cnt, (unsigned)fDaCalcSampleRateHz(data));
+	dcaLog(LOG_INFO, "DCA file loaded has %u channel%s with %u samples at %u hz\n", channels, channels>1?"s":"", sample_cnt, dcac->sample_rate_hz);
 	
 	//Convert to 16-bit PCM
 	unsigned format = (data->flags >> DCA_FLAG_FORMAT_SHIFT) & DCA_FLAG_FORMAT_MASK;
@@ -146,7 +146,7 @@ dcaError fDcaWrite(DcAudioConverter *cs, const char *outfname) {
 	}
 	
 	//Initialize header
-	DcAudioHeader head;
+	fDcAudioHeader head;
 	memset(&head, 0, sizeof(head));
 	memcpy(head.fourcc, DCA_FOURCC, sizeof(head.fourcc));
 	head.chunk_size = sizeof(head) + channelsize * cs->channel_cnt;
@@ -154,9 +154,7 @@ dcaError fDcaWrite(DcAudioConverter *cs, const char *outfname) {
 	head.flags = 
 		((cs->format & DCA_FLAG_FORMAT_MASK) << DCA_FLAG_FORMAT_SHIFT) |
 		(cs->channel_cnt & DCA_FLAG_CHANNEL_COUNT_MASK);
-	if (cs->long_sound)
-		head.flags |= DCA_FLAG_LONG;
-	head.sample_rate_aica = fDcaConvertFrequency(cs->sample_rate_hz);
+	head.sample_rate_aica = fDaConvertFrequency(cs->sample_rate_hz);
 	unsigned converted_sample_rate = fDcaToAICAFrequency(cs->sample_rate_hz);
 	head.total_length = cs->samples_len;
 	
@@ -167,6 +165,8 @@ dcaError fDcaWrite(DcAudioConverter *cs, const char *outfname) {
 	} else {
 		head.loop_end = cs->samples_len;
 	}
+	
+	assert(fDaValidateHeader(&head));
 	
 	//Write to disk
 	unsigned written = 0;
