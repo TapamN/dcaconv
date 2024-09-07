@@ -43,9 +43,7 @@ dcaError fDcaLoad(DcAudioConverter *dcac, const char *fname) {
 	
 	if (amountread != filesize)
 		goto readerror;
-	if (data->chunk_size > filesize)
-		goto readerror;
-	if (memcmp(data->fourcc, DCA_FOURCC, sizeof(data->fourcc)) != 0)
+	if (!fDaValidateHeader(data))
 		goto readerror;
 	
 	unsigned channels = fDaGetChannelCount(data);
@@ -58,7 +56,7 @@ dcaError fDcaLoad(DcAudioConverter *dcac, const char *fname) {
 	dcaLog(LOG_INFO, "DCA file loaded has %u channel%s with %u samples at %u hz\n", channels, channels>1?"s":"", sample_cnt, dcac->sample_rate_hz);
 	
 	//Convert to 16-bit PCM
-	unsigned format = (data->flags >> DCA_FLAG_FORMAT_SHIFT) & DCA_FLAG_FORMAT_MASK;
+	unsigned format = fDaGetSampleFormat(data);
 	if (format == DCAF_PCM16) {
 		for(unsigned c = 0; c < channels; c++) {
 			dcac->samples[c] = calloc(sample_cnt, sizeof(int16_t));
@@ -179,11 +177,8 @@ dcaError fDcaWrite(DcAudioConverter *cs, const char *outfname) {
 		written += fwrite(samples[i], 1, channelsize, f);
 	fclose(f);
 	
-	const char *fmt = "ADPCM";
-	if (cs->format == DCAF_PCM8) fmt = "PCM8";
-	if (cs->format == DCAF_PCM16) fmt = "PCM16";
 	dcaLog(LOG_PROGRESS, "Wrote %u channel%s of %u samples at %u hz, in %s format\n",
-		cs->channel_cnt, cs->channel_cnt>1?"s":"", head.total_length, converted_sample_rate, fmt);
+		cs->channel_cnt, cs->channel_cnt>1?"s":"", head.total_length, converted_sample_rate, fDaFormatString(cs->format));
 	
 	
 	for(unsigned i = 0; i < cs->channel_cnt; i++)

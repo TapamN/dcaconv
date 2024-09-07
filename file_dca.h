@@ -343,6 +343,14 @@ static inline int fDaGetSampleRateAICA(const fDcAudioHeader *dca) {
 	return dca->sample_rate_aica;
 }
 
+/*
+	Returns a string name for a format (like "ADPCM" for DCA_FLAG_FORMAT_ADPCM.
+*/
+const char * fDaFormatString(unsigned format);
+static inline const char * fDaFormatStringHdr(const fDcAudioHeader *dca) {
+	return fDaFormatString(fDaGetSampleFormat(dca));
+}
+
 #ifdef DCAUDIO_IMPLEMENTATION
 size_t fDaCalcChannelSizeBytes(const fDcAudioHeader *dca) {
 	size_t sz = dca->total_length;
@@ -412,6 +420,14 @@ int fDaValidateHeader(const fDcAudioHeader *dca) {
 	valid &= (fDaGetSampleRateAICA(dca) & 0x8000) == 0;
 	
 	return valid;
+}
+
+const char * fDaFormatString(unsigned format) {
+	static const char *fmtstrs[] = {"PCM16", "PCM8", "ADPCM", "UNK"};
+	
+	if (format > 3) format = 3;
+	
+	return fmtstrs[format];
 }
 #endif
 
