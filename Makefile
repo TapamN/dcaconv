@@ -33,6 +33,7 @@ README: readme_unformatted.txt
 
 install: $(TARGET)
 	install ./dcaconv ~/.local/bin/dcaconv
+	install dcaconv-completion.bash ~/.local/share/bash-completion/completions/dcaconv.bash
 
 clean:
 	rm -f $(TARGET) $(OBJS)
