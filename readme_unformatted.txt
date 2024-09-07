@@ -36,6 +36,8 @@ There is a hard limit of 88.2 Khz for ADPCM's the maximum sample rate. PCM8 and 
 
 An AICA channel is limited to playing sounds of 2^16 samples long. At a sample rate of 44100 hz, a sound could be at most 1.4 seconds long. At 22050 hz, the limit is 2.8 seconds. By default, when the source file is larger than 2^16 samples, dcaconv will reduce the sample rate of the output file enough so that the result is less than 2^16 samples long.
 
+Resampling is done using libsamplerate.
+
 Enabling the --long option will disable this and allow for longer sounds. The resulting files cannot be played purely by the AICA and will require software assistance from the SH4 or ARM CPU by stream the samples into a looping buffer.
 
 The AICA is said to sometimes have issues with looping when a sound is near 2^16 samples long. So work around this, dcaconv will target having a bit less than exactly 2^16 samples when converting.
@@ -78,7 +80,17 @@ Command Line Options:
 	Input audio file. This option is required.
 	
 	The following formats are supported:
-		WAV, FLAC, OGG (Vorbis), MP3
+	
+	.WAV
+		Uses dr_wav library. Supports multiple formats, including signed integer, floating point, and several ADPCM formats.
+	.FLAC
+		Uses dr_flac library.
+	.OGG (Vorbis)
+		Uses stb_vorbis library
+	.MP3
+		Uses dr_mp3 library.
+	.DCA
+		It's possible to convert DCA to WAV
 
 --out [filename], -o [filename]
 	Sets the file name of the resulting audio. The extension of this filename controls the file format.
@@ -164,7 +176,7 @@ Command Line Options:
 	
 --------------------------------------------------------------------------
 
-.DCA File Format
+.DCA File Format:
 
 	See file_dca.h for documentation. file_dca.h can also be used as a library to help access information from the file's header.
 	
@@ -172,13 +184,19 @@ Command Line Options:
 
 --------------------------------------------------------------------------
 
-Future Ideas
+Future Ideas:
 
 	* Improve ADPCM quality
 	
 	* Add support for generating other file formats, like ADX.
 	
 	* Better downmixing to stereo/mono
+
+--------------------------------------------------------------------------
+
+Possible Issues:
+
+	ADPCM looping has not been throughly tested. Not sure how the AICA handles the ADPCM prediction on when looping. Looping seems to work correctly when the sound is less than 2^16 samples long, which indicates the AICA remembers the ADPCM prediction for the loop start. That means it probably won't work as expected on long sounds.
 
 --------------------------------------------------------------------------
 
@@ -190,4 +208,5 @@ History:
 --------------------------------------------------------------------------
 
 License:
+
 	Public domain/BSD/MIT/whatever.
