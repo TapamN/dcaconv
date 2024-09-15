@@ -209,4 +209,4 @@ History:
 
 License:
 
-	Public domain/BSD/MIT/whatever.
+	GPL
