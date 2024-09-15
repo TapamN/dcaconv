@@ -17,16 +17,15 @@ DEBUGOPT= -O3
 
 .PHONY: all clean install README
 
+$(TARGET): $(OBJS)
+	gcc -o $(TARGET) \
+		$(OBJS) $(PROGMAIN) -lm -lstdc++
+
 %.o: %.c
 	gcc $(CFLAGS) $(MYCFLAGS) $(DEBUGOPT) -c $< -o $@
 
 %.o: %.cpp
 	gcc $(CFLAGS) $(MYCPPFLAGS) $(CXXFLAGS) $(DEBUGOPT) -c $< -o $@
-
-
-$(TARGET): $(OBJS)
-	gcc -o $(TARGET) \
-		$(OBJS) $(PROGMAIN) -lm -lstdc++
 
 README: readme_unformatted.txt
 	fmt -s readme_unformatted.txt > README
@@ -34,6 +33,9 @@ README: readme_unformatted.txt
 install: $(TARGET)
 	install ./dcaconv ~/.local/bin/dcaconv
 	install dcaconv-completion.bash ~/.local/share/bash-completion/completions/dcaconv.bash
+	echo You must run "source ~/.local/share/bash-completion/completions/dcaconv-completion.bash" for autocompletion to work in any existing terminals
 
 clean:
 	rm -f $(TARGET) $(OBJS)
+
+all: $(TARGET) README
