@@ -146,7 +146,7 @@ dcaError fDcaWrite(DcAudioConverter *cs, const char *outfname) {
 	//Initialize header
 	fDcAudioHeader head;
 	memset(&head, 0, sizeof(head));
-	memcpy(head.fourcc, DCA_FOURCC, sizeof(head.fourcc));
+	memcpy(head.fourcc, DCA_FOURCC_STR, sizeof(head.fourcc));
 	head.chunk_size = sizeof(head) + channelsize * cs->channel_cnt;
 	head.version = 0;
 	head.flags = 

@@ -27,7 +27,8 @@
 //Max channels supported by file format
 #define DCA_FILE_MAX_CHANNELS	7
 
-#define DCA_FOURCC	"DcAF"
+#define DCA_FOURCC_STR	"DcAF"
+#define DCA_FOURCC_UINT	0x46416344	//"DcAF" loaded as little endian int
 
 #define DCA_FLAG_CHANNEL_COUNT_SHIFT	0
 #define DCA_FLAG_CHANNEL_COUNT_MASK	0x7
@@ -59,7 +60,10 @@ typedef struct {
 		Four character code to identify file format.
 		Always equal to "DcAF"
 	*/
-	char fourcc[4];
+	union {
+		char fourcc[4];
+		uint32_t fourcc_uint;
+	};
 	
 	/*
 		Size of file, including header. This is different to IFF, 
@@ -88,7 +92,7 @@ typedef struct {
 	/*
 		The sample rate of the audio stored in the 15-bit floating point format used by the AICA.
 	*/
-	int16_t sample_rate_aica;
+	uint16_t sample_rate_aica;
 	
 	/*
 		Total length of the audio in samples, including any samples 
@@ -179,8 +183,7 @@ typedef struct {
 	Returns true if the fourcc matches
 */
 static inline bool fDaFourccMatches(const fDcAudioHeader *dca) {
-	const int *fourcc = (const int *)&dca->fourcc;
-	return *fourcc == 0x46416344;	//'DcAF'
+	return dca->fourcc_uint == DCA_FOURCC_UINT;
 }
 
 /*
@@ -305,7 +308,7 @@ static inline unsigned fDaIsLong(const fDcAudioHeader *dca) {
 size_t fDaCalcChannelSizeBytes(const fDcAudioHeader *dca);
 
 /*
-	Converts a sample rate to an AICA pitch value
+	Converts a sample rate in hertz to an AICA pitch value
 */
 unsigned fDaConvertFrequency(unsigned int freq_hz);
 
@@ -393,6 +396,11 @@ float fDaUnconvertFrequency(unsigned int freq) {
 
 int fDaValidateHeader(const fDcAudioHeader *dca) {
 	bool valid = true;
+	
+	if (dca == NULL)
+		return false;
+		
+	valid &= fDaGetFileSize(dca) > sizeof(fDcAudioHeader);
 	
 	//Check fourcc matches
 	valid &= fDaFourccMatches(dca);
