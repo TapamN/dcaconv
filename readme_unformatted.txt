@@ -209,4 +209,4 @@ History:
 
 License:
 
-	GPL
+	wav2adpcm source is GPL, so this as a whole is GPL as well, but you can also treat the dcaconv original files as also being BSD/MIT/public domain or whatever.
