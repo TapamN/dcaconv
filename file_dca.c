@@ -7,6 +7,7 @@
 #include "file_dca.h"
 
 #include "dca_conv.h"
+#include "ymz_codec.h"
 
 
 unsigned fDcaToAICAFrequency(unsigned int freq_hz) {
@@ -15,7 +16,7 @@ unsigned fDcaToAICAFrequency(unsigned int freq_hz) {
 
 void ConvertTo8bit(const int16_t *src, int8_t *dst, size_t sample_cnt) {
 	for(unsigned i = 0; i < sample_cnt; i++) {
-		dst[i] = src[i] >> 8;
+		dst[i] = (src[i]+128) >> 8;
 	}
 }
 
@@ -75,7 +76,7 @@ dcaError fDcaLoad(DcAudioConverter *dcac, const char *fname) {
 		for(unsigned c = 0; c < channels; c++) {
 			dcac->samples[c] = calloc(sample_cnt, sizeof(int16_t));
 			uint8_t *channel_ptr = (uint8_t*)fDaGetChannelSamples(data, c);;
-			adpcm2pcm(dcac->samples[c], channel_ptr, sample_cnt);
+			aica_decode(channel_ptr, dcac->samples[c], sample_cnt);
 		}
 	} else {
 		goto readerror;
@@ -139,7 +140,7 @@ dcaError fDcaWrite(DcAudioConverter *cs, const char *outfname) {
 	} else if (cs->format == DCAF_ADPCM) {
 		for(unsigned i = 0; i < cs->channel_cnt; i++) {
 			samples[i] = calloc(1, channelsize);
-			pcm2adpcm(samples[i], cs->samples[i], cs->samples_len);
+			aica_encode(cs->samples[i], samples[i], cs->samples_len);
 		}
 	}
 	
